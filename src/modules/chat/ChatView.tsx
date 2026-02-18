@@ -480,10 +480,76 @@ const MessageInput: React.FC<{ channelName: string }> = ({ channelName }) => {
   );
 };
 
+// ── SPEAKING STATE (local, not synced via store) ────────────
+// We keep speaking state separate from the main store to avoid
+// triggering full state syncs every 1-3 seconds per user.
+import { create } from 'zustand';
+
+interface SpeakingStore {
+  speaking: Record<string, boolean>;
+  setSpeaking: (userId: string, isSpeaking: boolean) => void;
+}
+const useSpeakingStore = create<SpeakingStore>()((set) => ({
+  speaking: {},
+  setSpeaking: (userId, isSpeaking) =>
+    set((s) => ({
+      speaking: isSpeaking
+        ? { ...s.speaking, [userId]: true }
+        : Object.fromEntries(Object.entries(s.speaking).filter(([k]) => k !== userId)),
+    })),
+}));
+
+// ── SPEAKING SIMULATION HOOK ────────────────────────────────
+function useSpeakingSimulation() {
+  const { currentUser, voiceConnections, getVoiceChannel } = useChatStore();
+  const activeVoice = getVoiceChannel();
+  const setSpeakingLocal = useSpeakingStore((s) => s.setSpeaking);
+
+  // Listen for speaking indicators from other users
+  useEffect(() => {
+    const unsub = syncManager.onSpeaking((data) => {
+      setSpeakingLocal(data.userId, data.speaking);
+    });
+    return unsub;
+  }, [setSpeakingLocal]);
+
+  // Simulate speaking for the local user
+  const isMuted = voiceConnections.find((vc) => vc.userId === currentUser?.id)?.isMuted ?? true;
+  useEffect(() => {
+    if (!activeVoice || !currentUser) return;
+    if (isMuted) {
+      setSpeakingLocal(currentUser.id, false);
+      syncManager.sendSpeaking(currentUser.id, false);
+      return;
+    }
+
+    let timeout: ReturnType<typeof setTimeout>;
+    const cycle = () => {
+      const isSpeaking = Math.random() > 0.45;
+      setSpeakingLocal(currentUser.id, isSpeaking);
+      syncManager.sendSpeaking(currentUser.id, isSpeaking);
+      const delay = isSpeaking
+        ? 800 + Math.random() * 2200
+        : 1500 + Math.random() * 4000;
+      timeout = setTimeout(cycle, delay);
+    };
+    timeout = setTimeout(cycle, 1000);
+
+    return () => {
+      clearTimeout(timeout);
+      setSpeakingLocal(currentUser.id, false);
+      syncManager.sendSpeaking(currentUser.id, false);
+    };
+  }, [activeVoice, currentUser?.id, isMuted, setSpeakingLocal]);
+}
+
 // ── VOICE CHANNEL PANEL ─────────────────────────────────────
 const VoiceChannelPanel: React.FC = () => {
   const { currentUser, getVoiceChannel, leaveVoiceChannel, toggleMute, toggleDeafen, voiceConnections, getUserById } = useChatStore();
+  const speaking = useSpeakingStore((s) => s.speaking);
   const activeVoiceChannel = getVoiceChannel();
+
+  useSpeakingSimulation();
 
   if (!activeVoiceChannel || !currentUser) return null;
 
@@ -505,7 +571,7 @@ const VoiceChannelPanel: React.FC = () => {
           <div key={vc.userId} className="flex items-center gap-2 px-2 py-1 rounded bg-surface-800/50">
             <div className={cn(
               'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold',
-              vc.isSpeaking ? 'ring-2 ring-green-500 bg-green-600' : 'bg-surface-700',
+              speaking[vc.userId] ? 'ring-2 ring-green-500 bg-green-600' : 'bg-surface-700',
             )}>
               {(getUserById(vc.userId)?.displayName ?? '?')[0]}
             </div>
@@ -569,6 +635,7 @@ const ChannelSidebar: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<{ channelId: string; x: number; y: number } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+  const speaking = useSpeakingStore((s) => s.speaking);
 
   const workspace = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
 
@@ -680,7 +747,10 @@ const ChannelSidebar: React.FC = () => {
             return (
               <div key={channel.id}>
                 <button
-                  onClick={() => { playJoinSound(); joinVoiceChannel(channel.id); setActiveChannel(channel.id); }}
+                  onClick={() => {
+                    if (activeVoice !== channel.id) { playJoinSound(); joinVoiceChannel(channel.id); }
+                    setActiveChannel(channel.id);
+                  }}
                   onContextMenu={(e) => handleContextMenu(e, channel.id)}
                   className={cn(
                     'flex items-center gap-2 w-full px-3 py-1.5 mx-2 rounded-md text-sm transition-colors',
@@ -703,7 +773,7 @@ const ChannelSidebar: React.FC = () => {
                       <div key={vc.userId} className="flex items-center gap-2 text-xs text-surface-400 px-2 py-0.5">
                         <div className={cn(
                           'w-4 h-4 rounded-full flex items-center justify-center text-[8px]',
-                          vc.isSpeaking ? 'bg-green-600 ring-1 ring-green-400' : 'bg-surface-700',
+                          speaking[vc.userId] ? 'bg-green-600 ring-1 ring-green-400' : 'bg-surface-700',
                         )}>
                           {(getUserById(vc.userId)?.displayName ?? '?')[0]}
                         </div>
@@ -853,6 +923,7 @@ const EmptyChat: React.FC<{ channelName?: string }> = ({ channelName }) => (
 // ── VOICE CHANNEL VIEW (main area) ──────────────────────────
 const VoiceChannelView: React.FC<{ channel: Channel }> = ({ channel }) => {
   const { getVoiceUsers, getVoiceChannel, joinVoiceChannel, leaveVoiceChannel, getUserById } = useChatStore();
+  const speaking = useSpeakingStore((s) => s.speaking);
   const voiceUsers = getVoiceUsers(channel.id);
   const activeVoice = getVoiceChannel();
   const isConnected = activeVoice === channel.id;
@@ -881,7 +952,7 @@ const VoiceChannelView: React.FC<{ channel: Channel }> = ({ channel }) => {
               <div key={vc.userId} className="flex flex-col items-center gap-1.5">
                 <div className={cn(
                   'w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold transition-all',
-                  vc.isSpeaking
+                  speaking[vc.userId]
                     ? 'ring-[3px] ring-green-500 bg-green-600 text-white'
                     : 'bg-surface-700 text-surface-300',
                 )}>

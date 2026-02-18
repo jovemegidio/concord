@@ -118,7 +118,18 @@ export const useChatStore = create<ChatStore>()(
         set((s) => {
           const user = CONCORD_USERS.find((u) => u.id === userId);
           if (user) {
-            s.currentUser = { ...user, status: 'online', customStatus: '', aboutMe: '', banner: '', createdAt: Date.now() };
+            // Preserve any existing profile data (avatar, banner, etc.) from server state
+            const existing = s.currentUser?.id === userId ? s.currentUser : null;
+            s.currentUser = {
+              ...user,
+              status: 'online',
+              customStatus: existing?.customStatus ?? '',
+              aboutMe: existing?.aboutMe ?? '',
+              banner: existing?.banner ?? '',
+              avatar: existing?.avatar ?? user.avatar,
+              displayName: existing?.displayName ?? user.displayName,
+              createdAt: existing?.createdAt ?? Date.now(),
+            };
             // Ensure Zyntra workspace always exists
             if (!s.workspaces.find((w) => w.id === ZYNTRA_WORKSPACE_ID)) {
               s.workspaces.unshift(createZyntraWorkspace());

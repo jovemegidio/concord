@@ -30,6 +30,7 @@ class SyncManager {
   private ready = false; // Don't broadcast until initial state received
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private typingListeners: Array<(data: { channelId: string; userId: string; isTyping: boolean }) => void> = [];
+  private speakingListeners: Array<(data: { userId: string; speaking: boolean }) => void> = [];
   private pendingIdentity: { userId: string; displayName: string } | null = null;
 
   connect() {
@@ -93,6 +94,12 @@ class SyncManager {
           case 'typing': {
             // Typing indicator from another user
             this.typingListeners.forEach((fn) => fn(msg));
+            break;
+          }
+
+          case 'speaking': {
+            // Speaking indicator from another user
+            this.speakingListeners.forEach((fn) => fn(msg));
             break;
           }
         }
@@ -164,6 +171,21 @@ class SyncManager {
     this.typingListeners.push(listener);
     return () => {
       this.typingListeners = this.typingListeners.filter((fn) => fn !== listener);
+    };
+  }
+
+  /** Send speaking indicator (relayed but not persisted) */
+  sendSpeaking(userId: string, speaking: boolean) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'speaking', userId, speaking }));
+    }
+  }
+
+  /** Listen for speaking indicators from other users */
+  onSpeaking(listener: (data: { userId: string; speaking: boolean }) => void) {
+    this.speakingListeners.push(listener);
+    return () => {
+      this.speakingListeners = this.speakingListeners.filter((fn) => fn !== listener);
     };
   }
 }

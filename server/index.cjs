@@ -34,12 +34,27 @@ function persist() {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     try {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(sharedState, null, 2));
+      fs.writeFileSync(DATA_FILE, JSON.stringify(sharedState));
     } catch (err) {
       console.error('❌ Erro ao salvar data.json:', err.message);
     }
-  }, 500);
+  }, 200);
 }
+
+// Graceful shutdown — save state before exiting
+function gracefulShutdown(signal) {
+  console.log(`\n⚡ ${signal} recebido, salvando estado...`);
+  if (persistTimer) clearTimeout(persistTimer);
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(sharedState));
+    console.log('✅ Estado salvo com sucesso.');
+  } catch (err) {
+    console.error('❌ Falha ao salvar:', err.message);
+  }
+  process.exit(0);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // ── Express (serve built frontend) ──────────────────────────
 const app = express();
@@ -65,7 +80,7 @@ app.get('*', (_req, res) => {
 });
 
 // ── WebSocket Server ────────────────────────────────────────
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 10 * 1024 * 1024 }); // 10MB max
 
 // Handle HTTP → WebSocket upgrade explicitly (required by some cloud platforms)
 server.on('upgrade', (request, socket, head) => {
@@ -143,6 +158,12 @@ wss.on('connection', (ws) => {
           break;
         }
 
+        case 'speaking': {
+          // Relay speaking indicator to others (not persisted to avoid disk spam)
+          broadcastToOthers(ws, msg);
+          break;
+        }
+
         case 'typing': {
           // Relay typing indicator to others (not persisted)
           broadcastToOthers(ws, msg);
@@ -161,6 +182,27 @@ wss.on('connection', (ws) => {
     const userId = connectedUsers.get(ws);
     if (userId) {
       console.log(`👋 ${userId} saiu`);
+      // Clean up voice connections for this user
+      if (sharedState.chat && Array.isArray(sharedState.chat.voiceConnections)) {
+        const before = sharedState.chat.voiceConnections.length;
+        sharedState.chat.voiceConnections = sharedState.chat.voiceConnections.filter(
+          (vc) => vc.userId !== userId
+        );
+        if (sharedState.chat.voiceConnections.length !== before) {
+          persist();
+          // Broadcast updated chat state to remaining clients
+          const msg = JSON.stringify({
+            type: 'sync',
+            store: 'chat',
+            state: sharedState.chat,
+          });
+          wss.clients.forEach((client) => {
+            if (client !== ws && client.readyState === 1) {
+              client.send(msg);
+            }
+          });
+        }
+      }
     }
     connectedUsers.delete(ws);
     console.log(`   (${wss.clients.size} cliente(s) restante(s))`);
