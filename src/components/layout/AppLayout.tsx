@@ -6,7 +6,7 @@ import { ChatView } from '@/modules/chat';
 import { BoardView } from '@/modules/board';
 import { PagesView } from '@/modules/pages';
 import { Button, Avatar } from '@/components/ui';
-import { Zap, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 const VIEW_MAP = {
   chat: ChatView,
@@ -43,8 +43,8 @@ const LoginScreen: React.FC = () => {
       <div className="w-full max-w-lg mx-4">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-600/30">
-            <Zap size={32} className="text-white" />
+          <div className="w-16 h-16 rounded-2xl bg-brand-600/10 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-600/30 ring-1 ring-brand-500/20 overflow-hidden">
+            <img src="/concord-logo.png" alt="Concord" className="w-14 h-14 object-contain" />
           </div>
           <h1 className="text-3xl font-bold text-surface-100 mb-1">Concord</h1>
           <p className="text-surface-500 text-sm">Chat · Quadros · Páginas — Tudo em um</p>
@@ -162,8 +162,8 @@ const WorkspaceSetup: React.FC = () => {
     <div className="h-screen w-screen flex items-center justify-center bg-surface-950">
       <div className="w-full max-w-md mx-4">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-600/30">
-            <Zap size={32} className="text-white" />
+          <div className="w-16 h-16 rounded-2xl bg-brand-600/10 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-600/30 ring-1 ring-brand-500/20 overflow-hidden">
+            <img src="/concord-logo.png" alt="Concord" className="w-14 h-14 object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-surface-100 mb-1">Crie seu workspace</h1>
           <p className="text-surface-500 text-sm">Um espaço para sua equipe colaborar</p>

@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type ThemeName = 'dark' | 'midnight' | 'light' | 'forest' | 'sunset';
+export type ThemeName = 'dark' | 'midnight' | 'light' | 'forest' | 'sunset' | 'ocean' | 'rose' | 'cyberpunk' | 'nord' | 'dracula';
 
 interface ThemePalette {
   surface: Record<string, string>;
@@ -85,6 +85,76 @@ const PALETTES: Record<ThemeName, ThemePalette> = {
       '900': '#7c2d12', '950': '#431407',
     },
   },
+  ocean: {
+    surface: {
+      '50': '#f0f9ff', '100': '#e0f2fe', '200': '#bae6fd',
+      '300': '#7dd3fc', '400': '#38bdf8', '500': '#0ea5e9',
+      '600': '#1e5a7e', '700': '#164060', '800': '#0f2e47',
+      '850': '#0b243a', '900': '#081c2f', '950': '#041220',
+    },
+    brand: {
+      '50': '#ecfeff', '100': '#cffafe', '200': '#a5f3fc',
+      '300': '#67e8f9', '400': '#22d3ee', '500': '#06b6d4',
+      '600': '#0891b2', '700': '#0e7490', '800': '#155e75',
+      '900': '#164e63', '950': '#083344',
+    },
+  },
+  rose: {
+    surface: {
+      '50': '#fff1f2', '100': '#ffe4e6', '200': '#fecdd3',
+      '300': '#fda4af', '400': '#fb7185', '500': '#a06070',
+      '600': '#7a4050', '700': '#5a3040', '800': '#361c28',
+      '850': '#2c1622', '900': '#22101a', '950': '#160a10',
+    },
+    brand: {
+      '50': '#fff1f2', '100': '#ffe4e6', '200': '#fecdd3',
+      '300': '#fda4af', '400': '#fb7185', '500': '#f43f5e',
+      '600': '#e11d48', '700': '#be123c', '800': '#9f1239',
+      '900': '#881337', '950': '#4c0519',
+    },
+  },
+  cyberpunk: {
+    surface: {
+      '50': '#fdf4ff', '100': '#fae8ff', '200': '#f5d0fe',
+      '300': '#f0abfc', '400': '#e879f9', '500': '#a855f7',
+      '600': '#5a2d6a', '700': '#3d1e4a', '800': '#291436',
+      '850': '#210f2e', '900': '#1a0b24', '950': '#0f0516',
+    },
+    brand: {
+      '50': '#fdf4ff', '100': '#fae8ff', '200': '#f5d0fe',
+      '300': '#e879f9', '400': '#d946ef', '500': '#c026d3',
+      '600': '#a21caf', '700': '#86198f', '800': '#701a75',
+      '900': '#581c87', '950': '#3b0764',
+    },
+  },
+  nord: {
+    surface: {
+      '50': '#eceff4', '100': '#e5e9f0', '200': '#d8dee9',
+      '300': '#aab4c5', '400': '#7b88a1', '500': '#616e88',
+      '600': '#4c566a', '700': '#434c5e', '800': '#3b4252',
+      '850': '#353c4a', '900': '#2e3440', '950': '#242933',
+    },
+    brand: {
+      '50': '#edf5fd', '100': '#dbeafb', '200': '#b8d5f7',
+      '300': '#88c0d0', '400': '#81a1c1', '500': '#5e81ac',
+      '600': '#4c6e96', '700': '#3b5b80', '800': '#2e4a6a',
+      '900': '#243d58', '950': '#1a2e42',
+    },
+  },
+  dracula: {
+    surface: {
+      '50': '#f8f8f2', '100': '#e8e8e0', '200': '#d0d0c8',
+      '300': '#b0b0a8', '400': '#8a8a80', '500': '#6c6c66',
+      '600': '#565660', '700': '#44475a', '800': '#363848',
+      '850': '#2e3040', '900': '#282a36', '950': '#1e1f29',
+    },
+    brand: {
+      '50': '#fff0ff', '100': '#ffe0ff', '200': '#ffb8ff',
+      '300': '#ff79c6', '400': '#ff55bd', '500': '#bd93f9',
+      '600': '#9e6fe0', '700': '#7e50c0', '800': '#6040a0',
+      '900': '#483080', '950': '#302060',
+    },
+  },
 };
 
 interface ThemeStore {
@@ -102,7 +172,7 @@ export const useThemeStore = create<ThemeStore>()(
         applyTheme(theme);
       },
       cycleTheme: () => {
-        const names: ThemeName[] = ['dark', 'midnight', 'light', 'forest', 'sunset'];
+        const names: ThemeName[] = ['dark', 'midnight', 'light', 'forest', 'sunset', 'ocean', 'rose', 'cyberpunk', 'nord', 'dracula'];
         const current = names.indexOf(get().theme);
         const next = names[(current + 1) % names.length];
         set({ theme: next });

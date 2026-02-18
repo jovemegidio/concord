@@ -673,19 +673,19 @@ const ChannelSidebar: React.FC = () => {
         {/* Workspace header */}
         <div
           onClick={() => setShowWorkspaceSettings(true)}
-          className="h-12 min-h-[48px] flex items-center justify-between px-4 border-b border-surface-800/50 hover:bg-surface-800/30 cursor-pointer"
+          className="h-12 min-h-[48px] flex items-center justify-between px-4 border-b border-surface-800/50 hover:bg-surface-800/30 cursor-pointer transition-colors group"
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             {workspace.iconImage ? (
-              <img src={workspace.iconImage} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+              <img src={workspace.iconImage} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 ring-1 ring-surface-700/50" />
             ) : (
-              <span className="text-lg shrink-0">{workspace.icon}</span>
+              <div className="w-7 h-7 rounded-lg bg-brand-600/20 flex items-center justify-center shrink-0">
+                <span className="text-base">{workspace.icon}</span>
+              </div>
             )}
-            <h3 className="font-semibold text-surface-200 truncate">{workspace.name}</h3>
+            <h3 className="font-semibold text-surface-100 truncate text-[15px]">{workspace.name}</h3>
           </div>
-          <div className="flex items-center gap-1">
-            <ChevronDown size={14} className="text-surface-500" />
-          </div>
+          <ChevronDown size={16} className="text-surface-500 group-hover:text-surface-300 transition-colors shrink-0" />
         </div>
 
         {/* Channels */}
@@ -694,13 +694,14 @@ const ChannelSidebar: React.FC = () => {
           <div className="px-2 mb-1">
             <button
               onClick={() => setTextExpanded(!textExpanded)}
-              className="flex items-center gap-1 text-[11px] font-semibold text-surface-500 uppercase tracking-wider hover:text-surface-300 w-full px-1"
+              className="flex items-center gap-1 text-[11px] font-bold text-surface-500 uppercase tracking-widest hover:text-surface-300 w-full px-1 py-1 transition-colors"
             >
               {textExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
               Canais de Texto
               <Plus
-                size={14}
-                className="ml-auto hover:text-surface-200"
+                size={15}
+                className="ml-auto hover:text-surface-200 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
+                style={{ opacity: 1 }}
                 onClick={(e) => { e.stopPropagation(); setShowCreateModal(true); }}
               />
             </button>
@@ -712,29 +713,32 @@ const ChannelSidebar: React.FC = () => {
               onClick={() => setActiveChannel(channel.id)}
               onContextMenu={(e) => handleContextMenu(e, channel.id)}
               className={cn(
-                'flex items-center gap-2 w-full px-3 py-1.5 mx-2 rounded-md text-sm transition-colors group',
+                'flex items-center gap-2 w-full px-2.5 py-1.5 mx-2 rounded-md text-[13px] transition-all duration-150 group relative',
                 'max-w-[calc(100%-16px)]',
                 activeChannelId === channel.id
-                  ? 'bg-surface-700/70 text-surface-100'
-                  : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800/50',
+                  ? 'bg-surface-700/70 text-surface-100 font-medium'
+                  : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/50',
               )}
             >
-              <ChannelIcon type={channel.type} size={16} className="shrink-0 opacity-60" />
+              {activeChannelId === channel.id && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand-500 rounded-r-full" />
+              )}
+              <ChannelIcon type={channel.type} size={16} className={cn('shrink-0', activeChannelId === channel.id ? 'opacity-80' : 'opacity-50')} />
               <span className="truncate">{channel.name}</span>
             </button>
           ))}
 
           {/* Voice channels */}
-          <div className="px-2 mb-1 mt-4">
+          <div className="px-2 mb-1 mt-5">
             <button
               onClick={() => setVoiceExpanded(!voiceExpanded)}
-              className="flex items-center gap-1 text-[11px] font-semibold text-surface-500 uppercase tracking-wider hover:text-surface-300 w-full px-1"
+              className="flex items-center gap-1 text-[11px] font-bold text-surface-500 uppercase tracking-widest hover:text-surface-300 w-full px-1 py-1 transition-colors"
             >
               {voiceExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
               Canais de Voz
               <Plus
-                size={14}
-                className="ml-auto hover:text-surface-200"
+                size={15}
+                className="ml-auto hover:text-surface-200 transition-opacity"
                 onClick={(e) => { e.stopPropagation(); setShowCreateModal(true); }}
               />
             </button>
@@ -768,19 +772,24 @@ const ChannelSidebar: React.FC = () => {
                 </button>
                 {/* Users in voice channel */}
                 {usersInChannel.length > 0 && (
-                  <div className="ml-10 space-y-0.5 mt-0.5">
-                    {usersInChannel.map((vc) => (
-                      <div key={vc.userId} className="flex items-center gap-2 text-xs text-surface-400 px-2 py-0.5">
-                        <div className={cn(
-                          'w-4 h-4 rounded-full flex items-center justify-center text-[8px]',
-                          speaking[vc.userId] ? 'bg-green-600 ring-1 ring-green-400' : 'bg-surface-700',
-                        )}>
-                          {(getUserById(vc.userId)?.displayName ?? '?')[0]}
+                  <div className="ml-8 space-y-0.5 mt-0.5 border-l-2 border-surface-800/60 pl-2">
+                    {usersInChannel.map((vc) => {
+                      const voiceUser = getUserById(vc.userId);
+                      return (
+                        <div key={vc.userId} className="flex items-center gap-2 text-xs text-surface-400 px-2 py-1 rounded hover:bg-surface-800/30">
+                          <div className={cn(
+                            'w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium transition-all',
+                            speaking[vc.userId] ? 'bg-green-600 ring-2 ring-green-400/50 text-white scale-110' : 'bg-surface-700 text-surface-300',
+                          )}>
+                            {(voiceUser?.displayName ?? '?')[0]}
+                          </div>
+                          <span className={cn('text-[12px]', speaking[vc.userId] && 'text-green-400 font-medium')}>
+                            {voiceUser?.displayName ?? vc.userId}
+                          </span>
+                          {vc.isMuted && <MicOff size={10} className="text-red-400 ml-auto" />}
                         </div>
-                        <span>{getUserById(vc.userId)?.displayName ?? vc.userId}</span>
-                        {vc.isMuted && <MicOff size={8} className="text-red-400" />}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -793,16 +802,16 @@ const ChannelSidebar: React.FC = () => {
 
         {/* User info */}
         {currentUser && (
-          <div className="p-2 bg-surface-950/50 border-t border-surface-800/50">
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-md">
-              <Avatar name={currentUser.displayName} src={currentUser.avatar || undefined} status={currentUser.status} size="xs" />
+          <div className="px-2 py-2 bg-surface-950/60 border-t border-surface-800/50">
+            <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-surface-800/40 transition-colors cursor-pointer" onClick={() => setShowProfile(true)}>
+              <Avatar name={currentUser.displayName} src={currentUser.avatar || undefined} status={currentUser.status} size="sm" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-surface-200 truncate">{currentUser.displayName}</p>
-                <p className="text-[10px] text-surface-500 truncate">
+                <p className="text-[13px] font-semibold text-surface-100 truncate leading-tight">{currentUser.displayName}</p>
+                <p className="text-[11px] text-surface-500 truncate leading-tight mt-0.5">
                   {currentUser.customStatus || ({ online: 'Online', idle: 'Ausente', dnd: 'Não Perturbe', offline: 'Offline' } as Record<string, string>)[currentUser.status]}
                 </p>
               </div>
-              <IconButton icon={<Settings size={14} />} size="sm" onClick={() => setShowProfile(true)} />
+              <IconButton icon={<Settings size={15} />} size="sm" onClick={(e: React.MouseEvent) => { e.stopPropagation(); setShowProfile(true); }} />
             </div>
           </div>
         )}

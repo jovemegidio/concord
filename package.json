@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "Concord — Discord + Trello + Notion unified workspace. A simplified clone showcasing complex frontend architecture.",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "dev:server": "node server/index.cjs",
@@ -14,7 +15,10 @@
     "launch": "node server/launch.cjs",
     "create-shortcut": "node server/create-shortcut.cjs",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "electron:dev": "concurrently \"vite\" \"node server/index.cjs\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "vite build && electron-builder --win --publish never",
+    "electron:start": "electron ."
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -38,7 +42,43 @@
     "vite": "^5.4.0"
   },
   "devDependencies": {
-    "eslint": "^9.8.0"
+    "concurrently": "^8.2.2",
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "eslint": "^9.8.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.concord.app",
+    "productName": "Concord",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "server/**/*",
+      "electron/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "server/",
+        "to": "server/",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "public/favicon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/favicon.png",
+      "uninstallerIcon": "public/favicon.png"
+    }
   },
   "keywords": [
     "discord-clone",

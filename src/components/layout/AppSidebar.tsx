@@ -24,6 +24,11 @@ const THEME_OPTIONS: { name: ThemeName; label: string; preview: string }[] = [
   { name: 'light', label: 'Claro', preview: '#f8fafc' },
   { name: 'forest', label: 'Floresta', preview: '#1a2e1a' },
   { name: 'sunset', label: 'Pôr do Sol', preview: '#2d1b2e' },
+  { name: 'ocean', label: 'Oceano', preview: '#081c2f' },
+  { name: 'rose', label: 'Rosé', preview: '#22101a' },
+  { name: 'cyberpunk', label: 'Cyberpunk', preview: '#1a0b24' },
+  { name: 'nord', label: 'Nord', preview: '#2e3440' },
+  { name: 'dracula', label: 'Drácula', preview: '#282a36' },
 ];
 
 // ── Workspace Selector Modal ────────────────────────────────
@@ -131,9 +136,13 @@ export const AppSidebar: React.FC = () => {
         <Tooltip content={workspace?.name ?? 'Workspaces'} position="right">
           <button
             onClick={() => setShowWorkspaces(true)}
-            className="w-12 h-12 rounded-2xl bg-brand-600 hover:bg-brand-500 flex items-center justify-center text-white font-bold text-lg transition-all duration-200 hover:rounded-xl mb-2 shadow-lg shadow-brand-600/20"
+            className="w-12 h-12 rounded-2xl bg-brand-600 hover:bg-brand-500 flex items-center justify-center text-white font-bold text-lg transition-all duration-200 hover:rounded-xl mb-2 shadow-lg shadow-brand-600/20 overflow-hidden"
           >
-            {workspace?.icon ?? '⚡'}
+            {workspace?.iconImage ? (
+              <img src={workspace.iconImage} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <img src="/concord-logo.png" alt="Concord" className="w-9 h-9 object-contain" />
+            )}
           </button>
         </Tooltip>
 
@@ -197,7 +206,7 @@ export const AppSidebar: React.FC = () => {
             {showThemes && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowThemes(false)} />
-                <div className="absolute left-full bottom-0 ml-3 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-50 py-2 px-1 min-w-[140px]">
+                <div className="absolute left-full bottom-0 ml-3 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-50 py-2 px-1 min-w-[160px] max-h-[400px] overflow-y-auto scrollbar-thin">
                   <p className="px-2 pb-1.5 text-[10px] text-surface-500 uppercase tracking-wider">Tema</p>
                   {THEME_OPTIONS.map((t) => (
                     <button
