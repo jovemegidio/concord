@@ -10,15 +10,19 @@ import type { StoreApi } from 'zustand';
 // ── Connection state (reactive via tiny Zustand store) ──────
 interface ConnectionState {
   connected: boolean;
+  initialSyncDone: boolean;
   onlineUsers: string[];
   _setConnected: (v: boolean) => void;
+  _setInitialSyncDone: (v: boolean) => void;
   _setOnlineUsers: (ids: string[]) => void;
 }
 
 export const useConnectionStore = create<ConnectionState>()((set) => ({
   connected: false,
+  initialSyncDone: false,
   onlineUsers: [],
   _setConnected: (v) => set({ connected: v }),
+  _setInitialSyncDone: (v) => set({ initialSyncDone: v }),
   _setOnlineUsers: (ids) => set({ onlineUsers: ids }),
 }));
 
@@ -71,6 +75,7 @@ class SyncManager {
             }
             this.isSyncing = false;
             this.ready = true; // Now safe to broadcast local changes
+            useConnectionStore.getState()._setInitialSyncDone(true);
             break;
           }
 
@@ -110,6 +115,7 @@ class SyncManager {
 
     this.ws.onclose = () => {
       useConnectionStore.getState()._setConnected(false);
+      useConnectionStore.getState()._setInitialSyncDone(false);
       this.ready = false;
       // Reconnect after 2 seconds
       this.reconnectTimer = setTimeout(() => this.connect(), 2000);

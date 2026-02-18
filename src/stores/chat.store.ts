@@ -103,6 +103,9 @@ interface ChatStore {
 
   // ── Reset ──
   reset: () => void;
+
+  // ── Zyntra ──
+  ensureZyntra: () => void;
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -429,6 +432,13 @@ export const useChatStore = create<ChatStore>()(
           voiceConnections: [],
           typingUsers: {},
         })),
+
+      ensureZyntra: () =>
+        set((s) => {
+          if (!s.workspaces.find((w) => w.id === ZYNTRA_WORKSPACE_ID)) {
+            s.workspaces.unshift(createZyntraWorkspace());
+          }
+        }),
     })),
     {
       name: 'concord-chat',

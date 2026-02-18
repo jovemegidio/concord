@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigationStore, useChatStore, syncManager } from '@/stores';
+import { useNavigationStore, useChatStore, useConnectionStore, syncManager } from '@/stores';
 import { CONCORD_USERS, CONCORD_PASSWORD, ZYNTRA_WORKSPACE_ID } from '@/stores/chat.store';
 import { AppSidebar } from './AppSidebar';
 import { ChatView } from '@/modules/chat';
@@ -221,6 +221,7 @@ function cn2(...classes: (string | boolean | undefined)[]) {
 export const AppLayout: React.FC = () => {
   const { currentView, activeWorkspaceId, setActiveWorkspace, setActiveChannel } = useNavigationStore();
   const { currentUser, workspaces, getWorkspaceById } = useChatStore();
+  const { initialSyncDone } = useConnectionStore();
   const ActiveView = VIEW_MAP[currentView];
 
   // Not logged in → login screen
@@ -232,6 +233,15 @@ export const AppLayout: React.FC = () => {
       syncManager.identify(currentUser.id, currentUser.displayName);
     }
   }, [isValidUser, currentUser]);
+
+  // Ensure Zyntra workspace always exists when user is valid
+  useEffect(() => {
+    if (!isValidUser) return;
+    const hasZyntra = useChatStore.getState().workspaces.find((w) => w.id === ZYNTRA_WORKSPACE_ID);
+    if (!hasZyntra) {
+      useChatStore.getState().ensureZyntra();
+    }
+  }, [isValidUser, initialSyncDone]);
 
   // Auto-select a workspace if current one was deleted
   useEffect(() => {
@@ -251,7 +261,21 @@ export const AppLayout: React.FC = () => {
     return <LoginScreen />;
   }
 
-  // Logged in but no workspaces → workspace setup
+  // Wait for initial sync from server before deciding if workspaces are really empty
+  if (workspaces.length === 0 && !initialSyncDone) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-surface-950">
+        <div className="text-center">
+          <div className="w-16 h-16 rounded-2xl bg-brand-600/10 flex items-center justify-center mx-auto mb-4 ring-1 ring-brand-500/20 overflow-hidden">
+            <img src="/concord-logo.png" alt="Concord" className="w-14 h-14 object-contain" />
+          </div>
+          <p className="text-surface-400 text-sm animate-pulse">Conectando ao servidor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Logged in but no workspaces even after sync → workspace setup
   if (workspaces.length === 0) {
     return <WorkspaceSetup />;
   }
