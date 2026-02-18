@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Star, FileText, ChevronRight, ChevronDown,
   GripVertical, Type, Heading1, Heading2, Heading3, List, ListOrdered,
   CheckSquare, Quote, Minus, Code, AlertCircle, Image, ToggleLeft, X,
-  Bell, Calendar, ExternalLink,
+  Bell, Calendar, ExternalLink, Upload,
 } from 'lucide-react';
 import { useNavigationStore, usePagesStore } from '@/stores';
 import { Button } from '@/components/ui';
@@ -150,27 +150,52 @@ const BlockRenderer: React.FC<{
               className="rounded-lg max-h-64 object-cover"
             />
           ) : (
-            <div
-              contentEditable
-              ref={contentRef}
-              data-block-id={block.id}
-              data-placeholder="Cole a URL da imagem..."
-              onInput={handleInput}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  const url = contentRef.current?.textContent?.trim();
-                  if (url) {
-                    // treat content as url
-                    updateBlockContent(pageId, block.id, '');
-                    // store in properties
-                    usePagesStore.getState().updateBlockProperties(pageId, block.id, { imageUrl: url });
+            <div className="w-full bg-surface-800 border border-dashed border-surface-700 rounded-lg px-4 py-4 space-y-2">
+              <div
+                contentEditable
+                ref={contentRef}
+                data-block-id={block.id}
+                data-placeholder="Cole a URL da imagem..."
+                onInput={handleInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const url = contentRef.current?.textContent?.trim();
+                    if (url) {
+                      updateBlockContent(pageId, block.id, '');
+                      usePagesStore.getState().updateBlockProperties(pageId, block.id, { imageUrl: url });
+                    }
                   }
-                }
-              }}
-              className="w-full bg-surface-800 border border-dashed border-surface-700 rounded-lg px-4 py-8 text-sm text-surface-400 text-center focus:outline-none focus:border-brand-500"
-              suppressContentEditableWarning
-            />
+                }}
+                className="w-full text-sm text-surface-400 text-center focus:outline-none"
+                suppressContentEditableWarning
+              />
+              <div className="flex justify-center">
+                <label className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-700/50 rounded-lg text-xs text-surface-400 hover:text-surface-200 hover:bg-surface-700 transition-colors cursor-pointer">
+                  <Upload size={12} />
+                  Importar do computador
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 4 * 1024 * 1024) { alert('Arquivo muito grande (máx. 4MB)'); return; }
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        if (typeof reader.result === 'string') {
+                          updateBlockContent(pageId, block.id, '');
+                          usePagesStore.getState().updateBlockProperties(pageId, block.id, { imageUrl: reader.result });
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -683,22 +708,50 @@ const PageEditor: React.FC<{ page: Page }> = ({ page }) => {
           </div>
         )}
 
-        {/* Cover URL input */}
+        {/* Cover URL input + file upload */}
         {showCoverInput && (
-          <div className="mb-4 flex gap-2">
-            <input
-              value={coverUrl}
-              onChange={(e) => setCoverUrl(e.target.value)}
-              placeholder="Cole a URL da imagem de capa..."
-              className="flex-1 bg-surface-800 border border-surface-700 rounded px-3 py-1.5 text-sm text-surface-200 placeholder:text-surface-600 focus:outline-none focus:border-brand-500"
-              autoFocus
-            />
-            <Button size="sm" onClick={() => { setPageCover(page.id, coverUrl); setShowCoverInput(false); }} disabled={!coverUrl.trim()}>
-              Salvar
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowCoverInput(false)}>
-              Cancelar
-            </Button>
+          <div className="mb-4 space-y-2">
+            <div className="flex gap-2">
+              <input
+                value={coverUrl}
+                onChange={(e) => setCoverUrl(e.target.value)}
+                placeholder="Cole a URL da imagem de capa..."
+                className="flex-1 bg-surface-800 border border-surface-700 rounded px-3 py-1.5 text-sm text-surface-200 placeholder:text-surface-600 focus:outline-none focus:border-brand-500"
+                autoFocus
+              />
+              <Button size="sm" onClick={() => { setPageCover(page.id, coverUrl); setShowCoverInput(false); }} disabled={!coverUrl.trim()}>
+                Salvar
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowCoverInput(false)}>
+                Cancelar
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-surface-500 uppercase">ou</span>
+              <label className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-400 hover:border-brand-500 hover:text-surface-200 transition-colors cursor-pointer">
+                <Upload size={14} />
+                Importar do computador
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 4 * 1024 * 1024) { alert('Arquivo muito grande (máx. 4MB)'); return; }
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      if (typeof reader.result === 'string') {
+                        setPageCover(page.id, reader.result);
+                        setShowCoverInput(false);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
           </div>
         )}
 

@@ -3,7 +3,7 @@ import {
   Hash, Volume2, Megaphone, Pin, SmilePlus,
   Plus, Trash2, Edit3, Send, Mic, MicOff, Headphones,
   PhoneOff, Settings, ChevronDown, ChevronRight, X, Check,
-  Users,
+  Users, Crown, Shield,
 } from 'lucide-react';
 import { useNavigationStore, useChatStore, syncManager, CONCORD_USERS, useConnectionStore } from '@/stores';
 import { Avatar, IconButton, Button, Modal } from '@/components/ui';
@@ -12,7 +12,7 @@ import { WorkspaceSettingsModal } from '@/components/layout/WorkspaceSettingsMod
 import { cn } from '@/lib/cn';
 import { formatMessageTime } from '@/lib/utils';
 import { playJoinSound, playLeaveSound, playMuteSound, playUnmuteSound, playDeafenSound } from '@/lib/sounds';
-import type { Message, Channel, ChannelType } from '@/types';
+import type { Message, Channel, ChannelType, User } from '@/types';
 
 // ── EMOJI PICKER (inline) ───────────────────────────────────
 const EMOJI_GROUPS = [
@@ -50,6 +50,241 @@ const ChannelIcon: React.FC<{ type: ChannelType; size?: number; className?: stri
   const icons = { text: Hash, voice: Volume2, announcement: Megaphone };
   const Icon = icons[type];
   return <Icon size={size} className={className} />;
+};
+
+// ── USER PROFILE POPUP (Discord-style card) ─────────────────
+const UserProfilePopup: React.FC<{
+  user: User;
+  isOpen: boolean;
+  onClose: () => void;
+  anchorEl?: HTMLElement | null;
+}> = ({ user, isOpen, onClose }) => {
+  const { currentUser } = useChatStore();
+  const { onlineUsers } = useConnectionStore();
+
+  if (!isOpen) return null;
+
+  const isCurrent = currentUser?.id === user.id;
+  const displayUser = isCurrent && currentUser ? currentUser : user;
+  const isOnline = onlineUsers.includes(user.id);
+  const statusLabel: Record<string, string> = {
+    online: 'Online',
+    idle: 'Ausente',
+    dnd: 'Não Perturbe',
+    offline: 'Offline',
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50" onClick={onClose} />
+      <div className="fixed z-50 inset-0 flex items-center justify-center pointer-events-none">
+        <div className="pointer-events-auto w-[340px] bg-surface-850 border border-surface-700 rounded-xl shadow-2xl overflow-hidden animate-pop-in">
+          {/* Banner */}
+          <div
+            className="h-[80px] relative"
+            style={displayUser.banner
+              ? { backgroundImage: `url(${displayUser.banner})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+              : { background: 'linear-gradient(135deg, var(--brand-600, #4f46e5) 0%, #7c3aed 100%)' }}
+          />
+
+          {/* Avatar overlapping banner */}
+          <div className="relative px-4">
+            <div className="absolute -top-8">
+              <div className="rounded-full p-1 bg-surface-850">
+                <Avatar
+                  name={displayUser.displayName}
+                  src={displayUser.avatar || undefined}
+                  size="lg"
+                  status={isOnline ? (isCurrent ? currentUser!.status : 'online') : 'offline'}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* User info */}
+          <div className="px-4 pt-10 pb-4">
+            <div className="bg-surface-900 rounded-lg p-3">
+              <h3 className="font-bold text-surface-100 text-lg leading-tight">{displayUser.displayName}</h3>
+              <p className="text-xs text-surface-500">@{displayUser.name}</p>
+
+              {/* Status */}
+              <div className="flex items-center gap-1.5 mt-2">
+                <div
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: isOnline ? '#22c55e' : '#6b7280' }}
+                />
+                <span className="text-xs text-surface-400">
+                  {isCurrent && currentUser
+                    ? statusLabel[currentUser.status] || 'Online'
+                    : isOnline ? 'Online' : 'Offline'}
+                </span>
+              </div>
+
+              {/* Custom status */}
+              {displayUser.customStatus && (
+                <div className="mt-2 pt-2 border-t border-surface-700">
+                  <p className="text-xs text-surface-300">💭 {displayUser.customStatus}</p>
+                </div>
+              )}
+
+              {/* About me */}
+              {displayUser.aboutMe && (
+                <div className="mt-2 pt-2 border-t border-surface-700">
+                  <p className="text-[10px] text-surface-500 uppercase font-semibold mb-1">Sobre mim</p>
+                  <p className="text-xs text-surface-300 whitespace-pre-wrap">{displayUser.aboutMe}</p>
+                </div>
+              )}
+
+              {/* Member since */}
+              <div className="mt-2 pt-2 border-t border-surface-700">
+                <p className="text-[10px] text-surface-500 uppercase font-semibold mb-1">Membro desde</p>
+                <p className="text-xs text-surface-300">
+                  {displayUser.createdAt > 0
+                    ? new Date(displayUser.createdAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
+                    : 'Hoje'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// ── MEMBERS MODAL ───────────────────────────────────────────
+const MembersModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const { currentUser, getWorkspaceById, getUserById } = useChatStore();
+  const { activeWorkspaceId } = useNavigationStore();
+  const { onlineUsers } = useConnectionStore();
+  const workspace = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  if (!workspace) return null;
+
+  const memberUsers = workspace.members.map((m) => {
+    const user = getUserById(m.userId);
+    return { user: user ?? CONCORD_USERS.find((u) => u.id === m.userId)!, member: m };
+  }).filter((x) => x.user);
+
+  const filteredMembers = searchTerm
+    ? memberUsers.filter((x) => x.user.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || x.user.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    : memberUsers;
+
+  const roleLabel = (role: string) => {
+    if (role === 'owner') return 'Dono';
+    if (role === 'admin') return 'Admin';
+    return 'Membro';
+  };
+
+  // Group by role
+  const owners = filteredMembers.filter((x) => x.member.role === 'owner');
+  const admins = filteredMembers.filter((x) => x.member.role === 'admin');
+  const members = filteredMembers.filter((x) => x.member.role === 'member');
+
+  const renderGroup = (title: string, items: typeof filteredMembers, icon?: React.ReactNode) => {
+    if (items.length === 0) return null;
+    return (
+      <div className="mb-4">
+        <div className="flex items-center gap-2 mb-2">
+          {icon}
+          <p className="text-[11px] text-surface-500 uppercase tracking-wider font-semibold">
+            {title} — {items.length}
+          </p>
+        </div>
+        <div className="space-y-1">
+          {items.map(({ user, member }) => {
+            const isCurrent = currentUser?.id === user.id;
+            const displayUser = isCurrent && currentUser ? currentUser : user;
+            const isOnline = onlineUsers.includes(user.id);
+
+            return (
+              <button
+                key={user.id}
+                onClick={() => setSelectedUser(displayUser)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-800/50 transition-colors text-left group"
+              >
+                <Avatar
+                  name={displayUser.displayName}
+                  src={displayUser.avatar || undefined}
+                  size="sm"
+                  status={isOnline ? (isCurrent ? currentUser!.status : 'online') : 'offline'}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-surface-200 truncate">{displayUser.displayName}</p>
+                    <span className={cn(
+                      'text-[9px] px-1.5 py-0.5 rounded-full font-medium',
+                      member.role === 'owner'
+                        ? 'bg-amber-600/20 text-amber-400'
+                        : member.role === 'admin'
+                          ? 'bg-blue-600/20 text-blue-400'
+                          : 'bg-surface-700/50 text-surface-500',
+                    )}>
+                      {member.role === 'owner' && <Crown size={8} className="inline mr-0.5 mb-0.5" />}
+                      {member.role === 'admin' && <Shield size={8} className="inline mr-0.5 mb-0.5" />}
+                      {roleLabel(member.role)}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-surface-500 truncate">@{displayUser.name}</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={cn(
+                    'text-[10px]',
+                    isOnline ? 'text-green-400' : 'text-surface-600',
+                  )}>
+                    {isOnline ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title={`Membros — ${workspace.name}`} size="lg">
+        <div>
+          {/* Search */}
+          <div className="mb-4">
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar membros..."
+              className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder:text-surface-600 focus:outline-none focus:border-brand-500"
+            />
+          </div>
+
+          {/* Members count */}
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-surface-700">
+            <Users size={16} className="text-surface-400" />
+            <span className="text-sm text-surface-300 font-medium">
+              {filteredMembers.length} membro{filteredMembers.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          {renderGroup('Dono', owners, <Crown size={14} className="text-amber-400" />)}
+          {renderGroup('Administradores', admins, <Shield size={14} className="text-blue-400" />)}
+          {renderGroup('Membros', members, <Users size={14} className="text-surface-400" />)}
+
+          {filteredMembers.length === 0 && (
+            <p className="text-center text-surface-500 text-sm py-8">Nenhum membro encontrado</p>
+          )}
+        </div>
+      </Modal>
+      {selectedUser && (
+        <UserProfilePopup
+          user={selectedUser}
+          isOpen={true}
+          onClose={() => setSelectedUser(null)}
+        />
+      )}
+    </>
+  );
 };
 
 // ── CREATE CHANNEL MODAL ────────────────────────────────────
@@ -191,7 +426,8 @@ const ChannelHeader: React.FC<{ channel: Channel; showMembers: boolean; onToggle
 const MessageBubble: React.FC<{
   message: Message;
   showAvatar: boolean;
-}> = ({ message, showAvatar }) => {
+  onUserClick?: (user: User) => void;
+}> = ({ message, showAvatar, onUserClick }) => {
   const [showActions, setShowActions] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -273,7 +509,9 @@ const MessageBubble: React.FC<{
     >
       <div className="flex items-start gap-3">
         {showAvatar ? (
-          <Avatar name={authorName} src={author?.avatar || undefined} size="sm" className="mt-0.5" />
+          <button onClick={() => author && onUserClick?.(author)} className="hover:opacity-80 transition-opacity">
+            <Avatar name={authorName} src={author?.avatar || undefined} size="sm" className="mt-0.5" />
+          </button>
         ) : (
           <div className="w-8 flex items-center justify-center">
             <span className="text-[10px] text-surface-600 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -285,7 +523,7 @@ const MessageBubble: React.FC<{
         <div className="flex-1 min-w-0">
           {showAvatar && (
             <div className="flex items-baseline gap-2 mb-0.5">
-              <span className="font-semibold text-sm text-surface-100">{authorName}</span>
+              <button onClick={() => author && onUserClick?.(author)} className="font-semibold text-sm text-surface-100 hover:underline">{authorName}</button>
               <span className="text-[11px] text-surface-600">{formatMessageTime(message.createdAt)}</span>
               {message.isPinned && <Pin size={10} className="text-amber-500" />}
             </div>
@@ -456,19 +694,26 @@ const MessageInput: React.FC<{ channelName: string }> = ({ channelName }) => {
 
   return (
     <div className="px-4 pb-4">
-      {/* Typing indicator */}
-      <div className="h-5 px-1 mb-0.5">
+      {/* Typing indicator with animated dots */}
+      <div className="h-6 px-1 mb-0.5 flex items-center">
         {typingNames.length > 0 && (
-          <p className="text-[11px] text-surface-400 animate-pulse-soft">
-            <span className="font-medium text-surface-300">
-              {typingNames.length === 1
-                ? typingNames[0]
-                : typingNames.length === 2
-                  ? `${typingNames[0]} e ${typingNames[1]}`
-                  : `${typingNames[0]} e mais ${typingNames.length - 1}`}
-            </span>
-            {' '}está digitando...
-          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-[3px]">
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+            </div>
+            <p className="text-[11px] text-surface-400">
+              <span className="font-medium text-surface-300">
+                {typingNames.length === 1
+                  ? typingNames[0]
+                  : typingNames.length === 2
+                    ? `${typingNames[0]} e ${typingNames[1]}`
+                    : `${typingNames[0]} e mais ${typingNames.length - 1}`}
+              </span>
+              {' '}está digitando...
+            </p>
+          </div>
         )}
       </div>
 
@@ -580,21 +825,28 @@ const VoiceChannelPanel: React.FC = () => {
       </div>
 
       <div className="space-y-1 mb-3">
-        {channelConnections.map((vc) => (
-          <div key={vc.userId} className="flex items-center gap-2 px-2 py-1 rounded bg-surface-800/50">
-            <div className={cn(
-              'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold',
-              speaking[vc.userId] ? 'ring-2 ring-green-500 bg-green-600' : 'bg-surface-700',
-            )}>
-              {(getUserById(vc.userId)?.displayName ?? '?')[0]}
+        {channelConnections.map((vc) => {
+          const voiceUser = getUserById(vc.userId);
+          return (
+            <div key={vc.userId} className="flex items-center gap-2 px-2 py-1 rounded bg-surface-800/50">
+              <div className={cn(
+                'transition-all rounded-full',
+                speaking[vc.userId] && 'ring-2 ring-green-500 scale-110',
+              )}>
+                <Avatar
+                  name={voiceUser?.displayName ?? '?'}
+                  src={voiceUser?.avatar || undefined}
+                  size="xs"
+                />
+              </div>
+              <span className="text-xs text-surface-300 flex-1">
+                {voiceUser?.displayName ?? vc.userId}
+              </span>
+              {vc.isMuted && <MicOff size={10} className="text-red-400" />}
+              {vc.isDeafened && <Headphones size={10} className="text-red-400" />}
             </div>
-            <span className="text-xs text-surface-300 flex-1">
-              {getUserById(vc.userId)?.displayName ?? vc.userId}
-            </span>
-            {vc.isMuted && <MicOff size={10} className="text-red-400" />}
-            {vc.isDeafened && <Headphones size={10} className="text-red-400" />}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="flex items-center gap-1">
@@ -648,6 +900,8 @@ const ChannelSidebar: React.FC = () => {
   const [contextMenu, setContextMenu] = useState<{ channelId: string; x: number; y: number } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [profilePopupUser, setProfilePopupUser] = useState<User | null>(null);
   const speaking = useSpeakingStore((s) => s.speaking);
   const [textCategoryName, setTextCategoryName] = useState('Canais de Texto');
   const [voiceCategoryName, setVoiceCategoryName] = useState('Canais de Voz');
@@ -687,23 +941,67 @@ const ChannelSidebar: React.FC = () => {
   return (
     <>
       <div className="w-60 min-w-[240px] bg-surface-900 flex flex-col border-r border-surface-800/50">
-        {/* Workspace header */}
-        <div
-          onClick={() => setShowWorkspaceSettings(true)}
-          className="h-12 min-h-[48px] flex items-center justify-between px-4 border-b border-surface-800/50 hover:bg-surface-800/30 cursor-pointer transition-colors group"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            {workspace.iconImage ? (
-              <img src={workspace.iconImage} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 ring-1 ring-surface-700/50" />
-            ) : (
-              <div className="w-7 h-7 rounded-lg bg-brand-600/20 flex items-center justify-center shrink-0">
-                <span className="text-base">{workspace.icon}</span>
+        {/* Workspace banner + header */}
+        {workspace.banner ? (
+          <div className="relative">
+            <div
+              className="h-[100px] bg-cover bg-center"
+              style={{ backgroundImage: `url(${workspace.banner})` }}
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-surface-900" />
+            </div>
+            <div
+              onClick={() => setShowWorkspaceSettings(true)}
+              className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-black/10 transition-colors group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                {workspace.iconImage ? (
+                  <img src={workspace.iconImage} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 ring-1 ring-white/20" />
+                ) : (
+                  <div className="w-7 h-7 rounded-lg bg-black/30 backdrop-blur-sm flex items-center justify-center shrink-0">
+                    <span className="text-base">{workspace.icon}</span>
+                  </div>
+                )}
+                <h3 className="font-semibold text-white truncate text-[15px] drop-shadow">{workspace.name}</h3>
               </div>
-            )}
-            <h3 className="font-semibold text-surface-100 truncate text-[15px]">{workspace.name}</h3>
+              <ChevronDown size={16} className="text-white/60 group-hover:text-white transition-colors shrink-0 drop-shadow" />
+            </div>
+            {/* Members button */}
+            <button
+              onClick={() => setShowMembersModal(true)}
+              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center text-white/70 hover:text-white hover:bg-black/50 transition-colors"
+              title="Membros"
+            >
+              <Users size={14} />
+            </button>
           </div>
-          <ChevronDown size={16} className="text-surface-500 group-hover:text-surface-300 transition-colors shrink-0" />
-        </div>
+        ) : (
+          <div
+            onClick={() => setShowWorkspaceSettings(true)}
+            className="h-12 min-h-[48px] flex items-center justify-between px-4 border-b border-surface-800/50 hover:bg-surface-800/30 cursor-pointer transition-colors group"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              {workspace.iconImage ? (
+                <img src={workspace.iconImage} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0 ring-1 ring-surface-700/50" />
+              ) : (
+                <div className="w-7 h-7 rounded-lg bg-brand-600/20 flex items-center justify-center shrink-0">
+                  <span className="text-base">{workspace.icon}</span>
+                </div>
+              )}
+              <h3 className="font-semibold text-surface-100 truncate text-[15px]">{workspace.name}</h3>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMembersModal(true); }}
+                className="w-6 h-6 rounded flex items-center justify-center text-surface-500 hover:text-surface-300 transition-colors"
+                title="Membros"
+              >
+                <Users size={14} />
+              </button>
+              <ChevronDown size={16} className="text-surface-500 group-hover:text-surface-300 transition-colors shrink-0" />
+            </div>
+          </div>
+        )}
 
         {/* Channels */}
         <div className="flex-1 overflow-y-auto py-3 scrollbar-thin">
@@ -834,16 +1132,22 @@ const ChannelSidebar: React.FC = () => {
                   <div className="ml-8 space-y-0.5 mt-0.5 border-l-2 border-surface-800/60 pl-2">
                     {usersInChannel.map((vc) => {
                       const voiceUser = getUserById(vc.userId);
+                      const isCurrent = currentUser?.id === vc.userId;
+                      const displayVoiceUser = isCurrent && currentUser ? currentUser : voiceUser;
                       return (
-                        <div key={vc.userId} className="flex items-center gap-2 text-xs text-surface-400 px-2 py-1 rounded hover:bg-surface-800/30">
+                        <div key={vc.userId} className="flex items-center gap-2 text-xs text-surface-400 px-2 py-1 rounded hover:bg-surface-800/30 cursor-pointer" onClick={() => displayVoiceUser && setProfilePopupUser(displayVoiceUser)}>
                           <div className={cn(
-                            'w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-medium transition-all',
-                            speaking[vc.userId] ? 'bg-green-600 ring-2 ring-green-400/50 text-white scale-110' : 'bg-surface-700 text-surface-300',
+                            'transition-all rounded-full',
+                            speaking[vc.userId] && 'ring-2 ring-green-400/50 scale-110',
                           )}>
-                            {(voiceUser?.displayName ?? '?')[0]}
+                            <Avatar
+                              name={displayVoiceUser?.displayName ?? '?'}
+                              src={displayVoiceUser?.avatar || undefined}
+                              size="xs"
+                            />
                           </div>
                           <span className={cn('text-[12px]', speaking[vc.userId] && 'text-green-400 font-medium')}>
-                            {voiceUser?.displayName ?? vc.userId}
+                            {displayVoiceUser?.displayName ?? vc.userId}
                           </span>
                           {vc.isMuted && <MicOff size={10} className="text-red-400 ml-auto" />}
                         </div>
@@ -862,7 +1166,7 @@ const ChannelSidebar: React.FC = () => {
         {/* User info */}
         {currentUser && (
           <div className="px-2 py-2 bg-surface-950/60 border-t border-surface-800/50">
-            <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-surface-800/40 transition-colors cursor-pointer" onClick={() => setShowProfile(true)}>
+            <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-surface-800/40 transition-colors cursor-pointer" onClick={() => setProfilePopupUser(currentUser)}>
               <Avatar name={currentUser.displayName} src={currentUser.avatar || undefined} status={currentUser.status} size="sm" />
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold text-surface-100 truncate leading-tight">{currentUser.displayName}</p>
@@ -897,6 +1201,14 @@ const ChannelSidebar: React.FC = () => {
 
       <CreateChannelModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />
       <UserProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
+      <MembersModal isOpen={showMembersModal} onClose={() => setShowMembersModal(false)} />
+      {profilePopupUser && (
+        <UserProfilePopup
+          user={profilePopupUser}
+          isOpen={true}
+          onClose={() => setProfilePopupUser(null)}
+        />
+      )}
       {activeWorkspaceId && (
         <WorkspaceSettingsModal
           isOpen={showWorkspaceSettings}
@@ -915,6 +1227,7 @@ const MemberListPanel: React.FC = () => {
   const { onlineUsers } = useConnectionStore();
   const workspace = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
   const isOwner = workspace?.ownerId === currentUser?.id;
+  const [profilePopupUser, setProfilePopupUser] = useState<User | null>(null);
 
   // Get member user objects from workspace
   const memberUsers = (workspace?.members ?? []).map((m) => {
@@ -943,6 +1256,7 @@ const MemberListPanel: React.FC = () => {
       <div
         key={user.id}
         className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-800/50 transition-colors cursor-pointer group"
+        onClick={() => setProfilePopupUser(displayUser)}
       >
         <Avatar
           name={displayUser.displayName}
@@ -956,7 +1270,10 @@ const MemberListPanel: React.FC = () => {
             <p className="text-[10px] text-surface-500 truncate">{currentUser.customStatus}</p>
           )}
           {memberData?.role === 'owner' && (
-            <p className="text-[10px] text-amber-500 truncate">Dono</p>
+            <p className="text-[10px] text-amber-500 truncate flex items-center gap-0.5">
+              <Crown size={8} />
+              Dono
+            </p>
           )}
         </div>
         {canRemove && (
@@ -973,30 +1290,39 @@ const MemberListPanel: React.FC = () => {
   };
 
   return (
-    <div className="w-56 min-w-[224px] bg-surface-900/50 border-l border-surface-800/50 flex flex-col">
-      <div className="p-3">
-        {online.length > 0 && (
-          <>
-            <p className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold px-2 mb-1">
-              Online — {online.length}
-            </p>
-            <div className="space-y-0.5 mb-4">
-              {online.map(renderUser)}
-            </div>
-          </>
-        )}
-        {offline.length > 0 && (
-          <>
-            <p className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold px-2 mb-1">
-              Offline — {offline.length}
-            </p>
-            <div className="space-y-0.5">
-              {offline.map(renderUser)}
-            </div>
-          </>
-        )}
+    <>
+      <div className="w-56 min-w-[224px] bg-surface-900/50 border-l border-surface-800/50 flex flex-col">
+        <div className="p-3">
+          {online.length > 0 && (
+            <>
+              <p className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold px-2 mb-1">
+                Online — {online.length}
+              </p>
+              <div className="space-y-0.5 mb-4">
+                {online.map(renderUser)}
+              </div>
+            </>
+          )}
+          {offline.length > 0 && (
+            <>
+              <p className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold px-2 mb-1">
+                Offline — {offline.length}
+              </p>
+              <div className="space-y-0.5">
+                {offline.map(renderUser)}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+      {profilePopupUser && (
+        <UserProfilePopup
+          user={profilePopupUser}
+          isOpen={true}
+          onClose={() => setProfilePopupUser(null)}
+        />
+      )}
+    </>
   );
 };
 
@@ -1044,20 +1370,25 @@ const VoiceChannelView: React.FC<{ channel: Channel }> = ({ channel }) => {
 
       {/* Connected users */}
       {voiceUsers.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-3 mb-6">
+        <div className="flex flex-wrap justify-center gap-4 mb-6">
           {voiceUsers.map((vc) => {
-            const name = getUserById(vc.userId)?.displayName ?? vc.userId;
+            const voiceUser = getUserById(vc.userId);
+            const name = voiceUser?.displayName ?? vc.userId;
             return (
               <div key={vc.userId} className="flex flex-col items-center gap-1.5">
                 <div className={cn(
-                  'w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold transition-all',
+                  'rounded-full transition-all',
                   speaking[vc.userId]
-                    ? 'ring-[3px] ring-green-500 bg-green-600 text-white'
-                    : 'bg-surface-700 text-surface-300',
+                    ? 'ring-[3px] ring-green-500 scale-105'
+                    : '',
                 )}>
-                  {name[0]?.toUpperCase() ?? '?'}
+                  <Avatar
+                    name={name}
+                    src={voiceUser?.avatar || undefined}
+                    size="lg"
+                  />
                 </div>
-                <span className="text-xs text-surface-400 max-w-[70px] truncate">{name}</span>
+                <span className="text-xs text-surface-400 max-w-[80px] truncate">{name}</span>
                 <div className="flex gap-1">
                   {vc.isMuted && <MicOff size={10} className="text-red-400" />}
                   {vc.isDeafened && <Headphones size={10} className="text-red-400" />}
@@ -1093,6 +1424,7 @@ export const ChatView: React.FC = () => {
   const { getChannelById, getChannelMessages } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showMembers, setShowMembers] = useState(false);
+  const [profilePopupUser, setProfilePopupUser] = useState<User | null>(null);
 
   const channel =
     activeWorkspaceId && activeChannelId
@@ -1138,6 +1470,7 @@ export const ChatView: React.FC = () => {
                               key={msg.id}
                               message={msg}
                               showAvatar={shouldShowAvatar(msg, messages[i - 1])}
+                              onUserClick={(user) => setProfilePopupUser(user)}
                             />
                           ))}
                           <div ref={messagesEndRef} />
@@ -1157,6 +1490,13 @@ export const ChatView: React.FC = () => {
           <EmptyChat />
         )}
       </div>
+      {profilePopupUser && (
+        <UserProfilePopup
+          user={profilePopupUser}
+          isOpen={true}
+          onClose={() => setProfilePopupUser(null)}
+        />
+      )}
     </div>
   );
 };
