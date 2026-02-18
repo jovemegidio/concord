@@ -1,0 +1,53 @@
+{
+  "name": "concord",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Concord — Discord + Trello + Notion unified workspace. A simplified clone showcasing complex frontend architecture.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "node server/index.cjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "server": "node server/index.cjs",
+    "start": "npm run build && node server/index.cjs",
+    "launch": "node server/launch.cjs",
+    "create-shortcut": "node server/create-shortcut.cjs",
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "express": "^4.22.1",
+    "immer": "^10.1.1",
+    "localtunnel": "^2.0.2",
+    "lucide-react": "^0.424.0",
+    "nanoid": "^5.0.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ws": "^8.19.0",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^9.8.0",
+    "postcss": "^8.4.40",
+    "tailwindcss": "^3.4.7",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  },
+  "keywords": [
+    "discord-clone",
+    "trello-clone",
+    "notion-clone",
+    "react",
+    "typescript",
+    "portfolio"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: concord
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: node server/index.cjs
+    envVars:
+      - key: NODE_ENV
+        value: production
