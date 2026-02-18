@@ -608,7 +608,14 @@ const ChannelSidebar: React.FC = () => {
           onClick={() => setShowWorkspaceSettings(true)}
           className="h-12 min-h-[48px] flex items-center justify-between px-4 border-b border-surface-800/50 hover:bg-surface-800/30 cursor-pointer"
         >
-          <h3 className="font-semibold text-surface-200 truncate">{workspace.name}</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            {workspace.iconImage ? (
+              <img src={workspace.iconImage} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+            ) : (
+              <span className="text-lg shrink-0">{workspace.icon}</span>
+            )}
+            <h3 className="font-semibold text-surface-200 truncate">{workspace.name}</h3>
+          </div>
           <div className="flex items-center gap-1">
             <ChevronDown size={14} className="text-surface-500" />
           </div>

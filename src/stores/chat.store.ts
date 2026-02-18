@@ -15,6 +15,34 @@ export const CONCORD_USERS: User[] = [
 
 export const CONCORD_PASSWORD = 'Concordbot';
 
+// ── Zyntra: Fixed default workspace for all users ───────────
+export const ZYNTRA_WORKSPACE_ID = 'ws-zyntra';
+
+function createZyntraWorkspace(): Workspace {
+  return {
+    id: ZYNTRA_WORKSPACE_ID,
+    name: 'Zyntra',
+    icon: '⚡',
+    description: 'Equipe principal do Concord',
+    banner: '',
+    ownerId: 'u-gidao',
+    members: CONCORD_USERS.map((u, i) => ({
+      userId: u.id,
+      role: i === 0 ? 'owner' as const : 'member' as const,
+      joinedAt: 0,
+    })),
+    channels: [
+      { id: 'ch-zyntra-general', workspaceId: ZYNTRA_WORKSPACE_ID, name: 'general', description: 'Discussão geral', type: 'text', messages: [], pinnedMessageIds: [], createdAt: 0 },
+      { id: 'ch-zyntra-random', workspaceId: ZYNTRA_WORKSPACE_ID, name: 'random', description: 'Bate-papo', type: 'text', messages: [], pinnedMessageIds: [], createdAt: 0 },
+      { id: 'ch-zyntra-anuncios', workspaceId: ZYNTRA_WORKSPACE_ID, name: 'anúncios', description: 'Comunicados importantes', type: 'announcement', messages: [], pinnedMessageIds: [], createdAt: 0 },
+      { id: 'ch-zyntra-voice', workspaceId: ZYNTRA_WORKSPACE_ID, name: 'Bate-papo de Voz', description: 'Canal de voz', type: 'voice', messages: [], pinnedMessageIds: [], createdAt: 0 },
+    ],
+    boards: [],
+    pages: [],
+    createdAt: 0,
+  };
+}
+
 // ── Voice state per channel ─────────────────────────────────
 export interface VoiceConnection {
   channelId: ID;
@@ -43,7 +71,7 @@ interface ChatStore {
   createWorkspace: (name: string, icon: string) => ID;
   deleteWorkspace: (id: ID) => void;
   renameWorkspace: (id: ID, name: string) => void;
-  updateWorkspace: (id: ID, updates: Partial<Pick<Workspace, 'name' | 'icon' | 'description' | 'banner'>>) => void;
+  updateWorkspace: (id: ID, updates: Partial<Pick<Workspace, 'name' | 'icon' | 'iconImage' | 'description' | 'banner'>>) => void;
   getWorkspaceById: (id: ID) => Workspace | undefined;
 
   // ── Channel ──
@@ -91,6 +119,10 @@ export const useChatStore = create<ChatStore>()(
           const user = CONCORD_USERS.find((u) => u.id === userId);
           if (user) {
             s.currentUser = { ...user, status: 'online', customStatus: '', aboutMe: '', banner: '', createdAt: Date.now() };
+            // Ensure Zyntra workspace always exists
+            if (!s.workspaces.find((w) => w.id === ZYNTRA_WORKSPACE_ID)) {
+              s.workspaces.unshift(createZyntraWorkspace());
+            }
           }
         }),
 
@@ -154,6 +186,7 @@ export const useChatStore = create<ChatStore>()(
 
       deleteWorkspace: (id) =>
         set((s) => {
+          if (id === ZYNTRA_WORKSPACE_ID) return; // Zyntra cannot be deleted
           s.workspaces = s.workspaces.filter((w) => w.id !== id);
         }),
 
@@ -169,6 +202,7 @@ export const useChatStore = create<ChatStore>()(
           if (!ws) return;
           if (updates.name !== undefined) ws.name = updates.name;
           if (updates.icon !== undefined) ws.icon = updates.icon;
+          if (updates.iconImage !== undefined) ws.iconImage = updates.iconImage;
           if (updates.description !== undefined) ws.description = updates.description;
           if (updates.banner !== undefined) ws.banner = updates.banner;
         }),

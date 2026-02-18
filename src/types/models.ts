@@ -36,6 +36,7 @@ export interface Workspace {
   id: ID;
   name: string;
   icon: string;
+  iconImage?: string;
   description: string;
   banner: string;
   ownerId: ID;

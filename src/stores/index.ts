@@ -1,5 +1,5 @@
 export { useNavigationStore } from './navigation.store';
-export { useChatStore, CONCORD_USERS, CONCORD_PASSWORD } from './chat.store';
+export { useChatStore, CONCORD_USERS, CONCORD_PASSWORD, ZYNTRA_WORKSPACE_ID } from './chat.store';
 export type { VoiceConnection } from './chat.store';
 export { useBoardStore } from './board.store';
 export { usePagesStore } from './pages.store';

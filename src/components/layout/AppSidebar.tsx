@@ -60,7 +60,7 @@ const WorkspaceModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface-800/50 hover:bg-surface-800 transition-colors group"
           >
-            <span className="text-2xl">{ws.icon}</span>
+            <span className="text-2xl">{ws.iconImage ? <img src={ws.iconImage} alt="" className="w-7 h-7 rounded-full object-cover" /> : ws.icon}</span>
             <div className="text-left">
               <p className="text-sm font-medium text-surface-200">{ws.name}</p>
               <p className="text-xs text-surface-500">{ws.channels.length} canais</p>
@@ -151,7 +151,7 @@ export const AppSidebar: React.FC = () => {
                 }}
                 className="w-10 h-10 rounded-2xl bg-surface-800 hover:bg-surface-700 flex items-center justify-center text-sm transition-all duration-200 hover:rounded-xl mb-1"
               >
-                {ws.icon}
+                {ws.iconImage ? <img src={ws.iconImage} alt="" className="w-7 h-7 rounded-full object-cover" /> : ws.icon}
               </button>
             </Tooltip>
           ))}

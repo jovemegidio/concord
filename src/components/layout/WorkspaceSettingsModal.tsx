@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Crown, Users, Trash2, Image } from 'lucide-react';
-import { useChatStore, CONCORD_USERS } from '@/stores';
+import React, { useState, useEffect, useRef } from 'react';
+import { Shield, Crown, Users, Trash2, Image, Upload } from 'lucide-react';
+import { useChatStore, CONCORD_USERS, ZYNTRA_WORKSPACE_ID } from '@/stores';
 import { Avatar, Button, Modal } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import type { ID } from '@/types';
@@ -24,6 +24,19 @@ export const WorkspaceSettingsModal: React.FC<{
   const [bannerUrl, setBannerUrl] = useState('');
   const [activeTab, setActiveTab] = useState<'geral' | 'membros'>('geral');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [iconImage, setIconImage] = useState('');
+  const iconInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (v: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert('Arquivo muito grande (máx. 2MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === 'string') setter(reader.result); };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   useEffect(() => {
     if (workspace && isOpen) {
@@ -31,6 +44,7 @@ export const WorkspaceSettingsModal: React.FC<{
       setIcon(workspace.icon);
       setDescription(workspace.description ?? '');
       setBannerUrl(workspace.banner ?? '');
+      setIconImage(workspace.iconImage ?? '');
       setActiveTab('geral');
       setConfirmDelete(false);
     }
@@ -49,6 +63,7 @@ export const WorkspaceSettingsModal: React.FC<{
     updateWorkspace(workspaceId, {
       name: name.trim() || workspace.name,
       icon,
+      iconImage: iconImage,
       description: description.trim(),
       banner: bannerUrl.trim(),
     });
@@ -97,7 +112,11 @@ export const WorkspaceSettingsModal: React.FC<{
                   style={bannerUrl ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
                 >
                   <div className="absolute bottom-3 left-4 flex items-center gap-3">
-                    <span className="text-3xl">{icon}</span>
+                    {iconImage ? (
+                      <img src={iconImage} alt="" className="w-9 h-9 rounded-full object-cover border-2 border-surface-800" />
+                    ) : (
+                      <span className="text-3xl">{icon}</span>
+                    )}
                     <div>
                       <p className="font-bold text-surface-100 text-lg drop-shadow">{name || workspace.name}</p>
                       {description && (
@@ -111,14 +130,14 @@ export const WorkspaceSettingsModal: React.FC<{
               {/* Icon picker */}
               <div>
                 <label className="block text-xs text-surface-400 mb-1.5 uppercase tracking-wider">Ícone do Servidor</label>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap mb-2">
                   {WORKSPACE_ICONS.map((emoji) => (
                     <button
                       key={emoji}
-                      onClick={() => setIcon(emoji)}
+                      onClick={() => { setIcon(emoji); setIconImage(''); }}
                       className={cn(
                         'w-9 h-9 rounded-lg flex items-center justify-center text-lg transition-all',
-                        icon === emoji
+                        icon === emoji && !iconImage
                           ? 'bg-brand-600/20 ring-2 ring-brand-500 scale-110'
                           : 'bg-surface-800 hover:bg-surface-700',
                       )}
@@ -127,6 +146,19 @@ export const WorkspaceSettingsModal: React.FC<{
                     </button>
                   ))}
                 </div>
+                <input ref={iconInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, setIconImage)} />
+                <button
+                  onClick={() => iconInputRef.current?.click()}
+                  className={cn(
+                    'w-full flex items-center gap-2 bg-surface-900 border rounded-lg px-3 py-2 text-sm transition-colors',
+                    iconImage
+                      ? 'border-brand-500 text-brand-400'
+                      : 'border-surface-700 text-surface-400 hover:border-brand-500 hover:text-surface-200',
+                  )}
+                >
+                  <Upload size={14} />
+                  {iconImage ? 'Imagem importada ✔' : 'Importar imagem como ícone...'}
+                </button>
               </div>
 
               {/* Name */}
@@ -153,22 +185,24 @@ export const WorkspaceSettingsModal: React.FC<{
                 />
               </div>
 
-              {/* Banner URL */}
+              {/* Banner */}
               <div>
                 <label className="block text-xs text-surface-400 mb-1.5 uppercase tracking-wider">
                   <Image size={10} className="inline mr-1" />
-                  URL do Banner
+                  Banner do Servidor
                 </label>
-                <input
-                  value={bannerUrl}
-                  onChange={(e) => setBannerUrl(e.target.value)}
-                  placeholder="https://exemplo.com/banner.jpg"
-                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder:text-surface-600 focus:outline-none focus:border-brand-500"
-                />
+                <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, setBannerUrl)} />
+                <button
+                  onClick={() => bannerInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-400 hover:border-brand-500 hover:text-surface-200 transition-colors"
+                >
+                  <Upload size={14} />
+                  {bannerUrl ? 'Trocar banner...' : 'Importar do computador...'}
+                </button>
               </div>
 
               {/* Danger zone */}
-              {isOwner && (
+              {isOwner && workspaceId !== ZYNTRA_WORKSPACE_ID && (
                 <div className="rounded-lg border border-red-600/30 p-4 bg-red-600/5">
                   <h4 className="text-sm font-semibold text-red-400 mb-2">Zona de Perigo</h4>
                   {!confirmDelete ? (

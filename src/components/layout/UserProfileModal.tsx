@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { User as UserIcon, Camera, X, AtSign } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User as UserIcon, Camera, X, AtSign, Upload } from 'lucide-react';
 import { useChatStore } from '@/stores';
 import { Avatar, Button, Modal } from '@/components/ui';
 import { cn } from '@/lib/cn';
@@ -25,6 +25,18 @@ export const UserProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }
   const [aboutMe, setAboutMe] = useState('');
   const [status, setStatus] = useState<UserStatus>('online');
   const [activeTab, setActiveTab] = useState<'perfil' | 'conta'>('perfil');
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (v: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert('Arquivo muito grande (máx. 2MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === 'string') setter(reader.result); };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   // Sync form when modal opens or user changes
   useEffect(() => {
@@ -148,24 +160,28 @@ export const UserProfileModal: React.FC<{ isOpen: boolean; onClose: () => void }
               <div>
                 <label className="block text-xs text-surface-400 mb-1.5 uppercase tracking-wider">
                   <Camera size={10} className="inline mr-1" />
-                  URL do Avatar
+                  Foto de Perfil
                 </label>
-                <input
-                  value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
-                  placeholder="https://exemplo.com/foto.jpg"
-                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder:text-surface-600 focus:outline-none focus:border-brand-500"
-                />
+                <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, setAvatarUrl)} />
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-400 hover:border-brand-500 hover:text-surface-200 transition-colors"
+                >
+                  <Upload size={14} />
+                  {avatarUrl ? 'Trocar imagem...' : 'Importar do computador...'}
+                </button>
               </div>
 
               <div>
-                <label className="block text-xs text-surface-400 mb-1.5 uppercase tracking-wider">URL do Banner</label>
-                <input
-                  value={bannerUrl}
-                  onChange={(e) => setBannerUrl(e.target.value)}
-                  placeholder="https://exemplo.com/banner.jpg"
-                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder:text-surface-600 focus:outline-none focus:border-brand-500"
-                />
+                <label className="block text-xs text-surface-400 mb-1.5 uppercase tracking-wider">Banner</label>
+                <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, setBannerUrl)} />
+                <button
+                  onClick={() => bannerInputRef.current?.click()}
+                  className="w-full flex items-center gap-2 bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-400 hover:border-brand-500 hover:text-surface-200 transition-colors"
+                >
+                  <Upload size={14} />
+                  {bannerUrl ? 'Trocar banner...' : 'Importar do computador...'}
+                </button>
               </div>
 
               <div>

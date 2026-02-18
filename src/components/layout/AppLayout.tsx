@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigationStore, useChatStore, syncManager } from '@/stores';
-import { CONCORD_USERS, CONCORD_PASSWORD } from '@/stores/chat.store';
+import { CONCORD_USERS, CONCORD_PASSWORD, ZYNTRA_WORKSPACE_ID } from '@/stores/chat.store';
 import { AppSidebar } from './AppSidebar';
 import { ChatView } from '@/modules/chat';
 import { BoardView } from '@/modules/board';
@@ -239,8 +239,8 @@ export const AppLayout: React.FC = () => {
 
     const currentWs = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
     if (!currentWs) {
-      // Active workspace was deleted or never set — pick the first available
-      const fallback = workspaces[0];
+      // Active workspace was deleted or never set — prefer Zyntra, then first available
+      const fallback = workspaces.find((w) => w.id === ZYNTRA_WORKSPACE_ID) || workspaces[0];
       setActiveWorkspace(fallback.id);
       const firstText = fallback.channels.find((c) => c.type === 'text' || c.type === 'announcement');
       if (firstText) setActiveChannel(firstText.id);
