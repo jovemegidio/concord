@@ -189,7 +189,8 @@ export type BlockType =
   | 'code'
   | 'callout'
   | 'image'
-  | 'toggle';
+  | 'toggle'
+  | 'reminder';
 
 export interface Block {
   id: ID;
@@ -209,6 +210,8 @@ export interface BlockProperties {
   isOpen?: boolean;
   level?: number;
   collapsed?: boolean;
+  reminderDate?: string; // ISO date string for reminders
+  reminderTime?: string; // HH:mm format
   [key: string]: unknown;
 }
 

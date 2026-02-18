@@ -3,6 +3,7 @@ import {
   Plus, Trash2, Star, FileText, ChevronRight, ChevronDown,
   GripVertical, Type, Heading1, Heading2, Heading3, List, ListOrdered,
   CheckSquare, Quote, Minus, Code, AlertCircle, Image, ToggleLeft, X,
+  Bell, Calendar, ExternalLink,
 } from 'lucide-react';
 import { useNavigationStore, usePagesStore } from '@/stores';
 import { Button } from '@/components/ui';
@@ -25,6 +26,7 @@ const BLOCK_TYPE_CONFIG: Record<BlockType, { label: string; icon: React.ReactNod
   callout: { label: 'Destaque', icon: <AlertCircle size={14} /> },
   image: { label: 'Imagem', icon: <Image size={14} /> },
   toggle: { label: 'Toggle', icon: <ToggleLeft size={14} /> },
+  reminder: { label: 'Lembrete', icon: <Bell size={14} /> },
 };
 
 // ── BLOCK TYPE SELECTOR ─────────────────────────────────────
@@ -175,6 +177,142 @@ const BlockRenderer: React.FC<{
     );
   }
 
+  // Reminder block
+  if (block.type === 'reminder') {
+    const reminderDate = (block.properties.reminderDate as string) || '';
+    const reminderTime = (block.properties.reminderTime as string) || '09:00';
+    const title = block.content || 'Lembrete';
+
+    // Google Calendar URL builder
+    const buildGoogleCalUrl = () => {
+      if (!reminderDate) return '#';
+      const date = reminderDate.replace(/-/g, '');
+      const [h, m] = reminderTime.split(':');
+      const startDt = `${date}T${h}${m}00`;
+      // End = start + 1 hour
+      const endH = String(parseInt(h) + 1).padStart(2, '0');
+      const endDt = `${date}T${endH}${m}00`;
+      const params = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: title,
+        dates: `${startDt}/${endDt}`,
+        details: `Lembrete do Concord: ${title}`,
+      });
+      return `https://calendar.google.com/calendar/render?${params.toString()}`;
+    };
+
+    // Apple Calendar (.ics) download
+    const buildIcsData = () => {
+      if (!reminderDate) return '';
+      const date = reminderDate.replace(/-/g, '');
+      const [h, m] = reminderTime.split(':');
+      const startDt = `${date}T${h}${m}00`;
+      const endH = String(parseInt(h) + 1).padStart(2, '0');
+      const endDt = `${date}T${endH}${m}00`;
+      return [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Concord//Reminder//PT',
+        'BEGIN:VEVENT',
+        `DTSTART:${startDt}`,
+        `DTEND:${endDt}`,
+        `SUMMARY:${title}`,
+        `DESCRIPTION:Lembrete do Concord: ${title}`,
+        'BEGIN:VALARM',
+        'TRIGGER:-PT15M',
+        'ACTION:DISPLAY',
+        `DESCRIPTION:${title}`,
+        'END:VALARM',
+        'END:VEVENT',
+        'END:VCALENDAR',
+      ].join('\r\n');
+    };
+
+    const downloadIcs = () => {
+      const data = buildIcsData();
+      if (!data) return;
+      const blob = new Blob([data], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title.replace(/\s+/g, '_')}.ics`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    const isPast = reminderDate && new Date(`${reminderDate}T${reminderTime}`) < new Date();
+
+    return (
+      <div className="group flex items-start gap-2 py-1 px-1">
+        <button
+          onClick={() => deleteBlock(pageId, block.id)}
+          className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-surface-400 mt-2 transition-opacity"
+        >
+          <GripVertical size={14} />
+        </button>
+        <div className={cn(
+          'flex-1 border rounded-lg px-4 py-3',
+          isPast
+            ? 'bg-surface-800/30 border-surface-700'
+            : 'bg-amber-600/5 border-amber-600/20',
+        )}>
+          <div className="flex items-center gap-2 mb-2">
+            <Bell size={16} className={isPast ? 'text-surface-500' : 'text-amber-400'} />
+            <div
+              ref={contentRef}
+              contentEditable
+              data-block-id={block.id}
+              data-placeholder="Título do lembrete..."
+              onInput={handleInput}
+              className={cn(
+                'flex-1 text-sm font-medium focus:outline-none',
+                isPast ? 'text-surface-400 line-through' : 'text-surface-200',
+              )}
+              suppressContentEditableWarning
+            />
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Calendar size={12} className="text-surface-500" />
+              <input
+                type="date"
+                value={reminderDate}
+                onChange={(e) => usePagesStore.getState().updateBlockProperties(pageId, block.id, { reminderDate: e.target.value })}
+                className="bg-surface-800 border border-surface-700 rounded px-2 py-1 text-xs text-surface-300 focus:outline-none focus:border-brand-500"
+              />
+              <input
+                type="time"
+                value={reminderTime}
+                onChange={(e) => usePagesStore.getState().updateBlockProperties(pageId, block.id, { reminderTime: e.target.value })}
+                className="bg-surface-800 border border-surface-700 rounded px-2 py-1 text-xs text-surface-300 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+            {reminderDate && (
+              <div className="flex items-center gap-1.5">
+                <a
+                  href={buildGoogleCalUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2 py-1 bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 rounded text-[11px] font-medium transition-colors"
+                >
+                  <ExternalLink size={10} />
+                  Google Calendar
+                </a>
+                <button
+                  onClick={downloadIcs}
+                  className="flex items-center gap-1 px-2 py-1 bg-surface-700/50 text-surface-300 hover:bg-surface-700 rounded text-[11px] font-medium transition-colors"
+                >
+                  <ExternalLink size={10} />
+                  Apple Calendar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Content classes per block type
   const contentClasses: Record<string, string> = {
     paragraph: 'text-surface-300 text-sm',
@@ -188,6 +326,7 @@ const BlockRenderer: React.FC<{
     callout: 'text-sm text-surface-300 bg-surface-800/50 border border-surface-700 rounded-lg px-3 py-2',
     toggle: 'text-sm text-surface-300',
     todo: 'text-sm text-surface-300',
+    reminder: 'text-sm text-surface-300',
   };
 
   // Prefix for list items
@@ -373,7 +512,7 @@ const PageSidebar: React.FC = () => {
     <div className="w-60 min-w-[240px] bg-surface-900 flex flex-col border-r border-surface-800/50">
       <div className="h-12 min-h-[48px] flex items-center px-4 border-b border-surface-800/50">
         <FileText size={18} className="text-surface-500 mr-2" />
-        <h3 className="font-semibold text-surface-200">Páginas</h3>
+        <h3 className="font-semibold text-surface-200">Notas</h3>
       </div>
 
       <div className="flex-1 overflow-y-auto py-2 scrollbar-thin">
@@ -405,7 +544,7 @@ const PageSidebar: React.FC = () => {
 
         {/* All pages tree */}
         <p className="px-3 py-1 text-[10px] text-surface-500 uppercase tracking-wider font-semibold">
-          Páginas
+          Notas
         </p>
         {rootPages.map((page) => (
           <PageTreeItem key={page.id} page={page} depth={0} />
@@ -414,7 +553,7 @@ const PageSidebar: React.FC = () => {
         {rootPages.length === 0 && !showCreate && (
           <div className="px-4 py-8 text-center">
             <FileText size={32} className="text-surface-700 mx-auto mb-2" />
-            <p className="text-xs text-surface-600">Nenhuma página ainda</p>
+            <p className="text-xs text-surface-600">Nenhuma nota ainda</p>
           </div>
         )}
       </div>
@@ -429,7 +568,7 @@ const PageSidebar: React.FC = () => {
                 if (e.key === 'Enter') handleCreate();
                 if (e.key === 'Escape') setShowCreate(false);
               }}
-              placeholder="Título da página..."
+              placeholder="Título da nota..."
               className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder:text-surface-600 focus:outline-none focus:border-brand-500"
               autoFocus
             />
@@ -446,7 +585,7 @@ const PageSidebar: React.FC = () => {
             icon={<Plus size={14} />}
             className="w-full"
           >
-            Nova Página
+            Nova Nota
           </Button>
         )}
       </div>
@@ -456,17 +595,26 @@ const PageSidebar: React.FC = () => {
 
 // ── PAGE EDITOR ─────────────────────────────────────────────
 const PageEditor: React.FC<{ page: Page }> = ({ page }) => {
-  const { renamePage, setPageIcon, addBlock, setPageCover } = usePagesStore();
+  const { renamePage, setPageIcon, addBlock, setPageCover, getPageById } = usePagesStore();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(page.title);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showCoverInput, setShowCoverInput] = useState(false);
   const [coverUrl, setCoverUrl] = useState(page.coverImage || '');
+  const { setActivePage } = useNavigationStore();
 
   useEffect(() => {
     setTitleValue(page.title);
     setCoverUrl(page.coverImage || '');
   }, [page.id, page.title, page.coverImage]);
+
+  // Build breadcrumb chain
+  const breadcrumbs: Page[] = [];
+  let current: Page | undefined = page.parentId ? getPageById(page.parentId) : undefined;
+  while (current) {
+    breadcrumbs.unshift(current);
+    current = current.parentId ? getPageById(current.parentId) : undefined;
+  }
 
   const COMMON_EMOJIS = [
     '📄', '📝', '📋', '📌', '📎', '📑', '🗂️', '📁',
@@ -482,6 +630,29 @@ const PageEditor: React.FC<{ page: Page }> = ({ page }) => {
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin">
       <div className="max-w-3xl mx-auto px-8 py-12">
+        {/* Breadcrumbs */}
+        {breadcrumbs.length > 0 && (
+          <div className="flex items-center gap-1 text-xs text-surface-500 mb-4 -mt-4 flex-wrap">
+            {breadcrumbs.map((bc, i) => (
+              <React.Fragment key={bc.id}>
+                <button
+                  onClick={() => setActivePage(bc.id)}
+                  className="hover:text-surface-300 transition-colors flex items-center gap-1"
+                >
+                  <span>{bc.icon}</span>
+                  <span>{bc.title || 'Sem título'}</span>
+                </button>
+                {i < breadcrumbs.length && (
+                  <ChevronRight size={10} className="text-surface-600" />
+                )}
+              </React.Fragment>
+            ))}
+            <span className="text-surface-400 flex items-center gap-1">
+              <span>{page.icon}</span>
+              <span>{page.title || 'Sem título'}</span>
+            </span>
+          </div>
+        )}
         {/* Cover area */}
         {page.coverImage ? (
           <div className="relative h-48 -mx-8 -mt-12 mb-6 rounded-t-lg overflow-hidden group">
@@ -629,9 +800,9 @@ export const PagesView: React.FC = () => {
               <div className="w-16 h-16 rounded-full bg-surface-800 flex items-center justify-center mx-auto mb-4">
                 <FileText size={32} className="text-surface-500" />
               </div>
-              <h3 className="text-xl font-bold text-surface-200 mb-2">Selecione uma Página</h3>
+              <h3 className="text-xl font-bold text-surface-200 mb-2">Selecione uma Nota</h3>
               <p className="text-sm text-surface-500">
-                Escolha uma página na barra lateral ou crie uma nova para começar a escrever.
+                Escolha uma nota na barra lateral ou crie uma nova para começar a escrever.
               </p>
             </div>
           </div>

@@ -47,7 +47,7 @@ const LoginScreen: React.FC = () => {
             <img src="/concord-logo.png" alt="Concord" className="w-14 h-14 object-contain" />
           </div>
           <h1 className="text-3xl font-bold text-surface-100 mb-1">Concord</h1>
-          <p className="text-surface-500 text-sm">Chat · Quadros · Páginas — Tudo em um</p>
+          <p className="text-surface-500 text-sm">Chat · Kanban · Notas — Tudo em um</p>
         </div>
 
         <div className={cn2(

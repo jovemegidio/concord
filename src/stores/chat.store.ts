@@ -11,6 +11,7 @@ export const CONCORD_USERS: User[] = [
   { id: 'u-isadora', name: 'isadora', displayName: 'Isadora', avatar: '', status: 'online', customStatus: '', aboutMe: '', banner: '', email: 'isadora@concord.app', createdAt: 0 },
   { id: 'u-ranniere', name: 'ranniere', displayName: 'Ranniere', avatar: '', status: 'online', customStatus: '', aboutMe: '', banner: '', email: 'ranniere@concord.app', createdAt: 0 },
   { id: 'u-isaac', name: 'isaac', displayName: 'Isaac', avatar: '', status: 'online', customStatus: '', aboutMe: '', banner: '', email: 'isaac@concord.app', createdAt: 0 },
+  { id: 'u-clemerson', name: 'clemerson', displayName: 'Clemerson', avatar: '', status: 'online', customStatus: '', aboutMe: '', banner: '', email: 'clemerson@concord.app', createdAt: 0 },
 ];
 
 export const CONCORD_PASSWORD = 'Concordbot';
@@ -73,6 +74,7 @@ interface ChatStore {
   renameWorkspace: (id: ID, name: string) => void;
   updateWorkspace: (id: ID, updates: Partial<Pick<Workspace, 'name' | 'icon' | 'iconImage' | 'description' | 'banner'>>) => void;
   getWorkspaceById: (id: ID) => Workspace | undefined;
+  removeMember: (workspaceId: ID, userId: ID) => void;
 
   // ── Channel ──
   createChannel: (workspaceId: ID, name: string, type: ChannelType, description?: string) => ID;
@@ -222,6 +224,16 @@ export const useChatStore = create<ChatStore>()(
         }),
 
       getWorkspaceById: (id) => get().workspaces.find((w) => w.id === id),
+
+      removeMember: (workspaceId, userId) =>
+        set((s) => {
+          const ws = s.workspaces.find((w) => w.id === workspaceId);
+          if (!ws) return;
+          // Cannot remove the owner
+          const member = ws.members.find((m) => m.userId === userId);
+          if (!member || member.role === 'owner') return;
+          ws.members = ws.members.filter((m) => m.userId !== userId);
+        }),
 
       // ── Channel ──
       createChannel: (workspaceId, name, type, description) => {

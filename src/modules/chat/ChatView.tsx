@@ -128,7 +128,7 @@ const CreateChannelModal: React.FC<{ isOpen: boolean; onClose: () => void }> = (
 // ── CHANNEL HEADER ──────────────────────────────────────────
 const ChannelHeader: React.FC<{ channel: Channel; showMembers: boolean; onToggleMembers: () => void }> = ({ channel, showMembers, onToggleMembers }) => {
   const [showPins, setShowPins] = useState(false);
-  const { getChannelMessages } = useChatStore();
+  const { getChannelMessages, getUserById } = useChatStore();
   const { activeWorkspaceId } = useNavigationStore();
   const messages = activeWorkspaceId ? getChannelMessages(activeWorkspaceId, channel.id) : [];
   const pinnedMessages = messages.filter((m) => m.isPinned);
@@ -150,17 +150,30 @@ const ChannelHeader: React.FC<{ channel: Channel; showMembers: boolean; onToggle
             onClick={() => setShowPins(!showPins)}
             tooltip={`${pinnedMessages.length} fixada(s)`}
           />
-          {showPins && pinnedMessages.length > 0 && (
-            <div className="absolute right-0 top-full mt-1 w-80 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-50 p-3 max-h-60 overflow-y-auto">
-              <h3 className="text-xs font-semibold text-surface-400 uppercase mb-2">
-                Mensagens Fixadas ({pinnedMessages.length})
-              </h3>
-              {pinnedMessages.map((m) => (
-                <div key={m.id} className="text-sm text-surface-300 py-1.5 border-b border-surface-700 last:border-0">
-                  {m.content}
-                </div>
-              ))}
-            </div>
+          {showPins && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowPins(false)} />
+              <div className="absolute right-0 top-full mt-1 w-80 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-50 p-3 max-h-60 overflow-y-auto">
+                <h3 className="text-xs font-semibold text-surface-400 uppercase mb-2">
+                  Mensagens Fixadas ({pinnedMessages.length})
+                </h3>
+                {pinnedMessages.length === 0 && (
+                  <p className="text-xs text-surface-600 py-2">Nenhuma mensagem fixada</p>
+                )}
+                {pinnedMessages.map((m) => {
+                  const author = getUserById(m.authorId);
+                  return (
+                    <div key={m.id} className="py-2 border-b border-surface-700 last:border-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-xs font-semibold text-surface-200">{author?.displayName ?? m.authorId}</span>
+                        <span className="text-[10px] text-surface-600">{formatMessageTime(m.createdAt)}</span>
+                      </div>
+                      <p className="text-sm text-surface-300">{m.content}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
         <IconButton
@@ -636,6 +649,10 @@ const ChannelSidebar: React.FC = () => {
   const [showProfile, setShowProfile] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
   const speaking = useSpeakingStore((s) => s.speaking);
+  const [textCategoryName, setTextCategoryName] = useState('Canais de Texto');
+  const [voiceCategoryName, setVoiceCategoryName] = useState('Canais de Voz');
+  const [editingCategory, setEditingCategory] = useState<'text' | 'voice' | null>(null);
+  const [categoryEditValue, setCategoryEditValue] = useState('');
 
   const workspace = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
 
@@ -692,19 +709,40 @@ const ChannelSidebar: React.FC = () => {
         <div className="flex-1 overflow-y-auto py-3 scrollbar-thin">
           {/* Text channels */}
           <div className="px-2 mb-1">
-            <button
-              onClick={() => setTextExpanded(!textExpanded)}
-              className="flex items-center gap-1 text-[11px] font-bold text-surface-500 uppercase tracking-widest hover:text-surface-300 w-full px-1 py-1 transition-colors"
-            >
-              {textExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-              Canais de Texto
-              <Plus
-                size={15}
-                className="ml-auto hover:text-surface-200 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
-                style={{ opacity: 1 }}
-                onClick={(e) => { e.stopPropagation(); setShowCreateModal(true); }}
+            {editingCategory === 'text' ? (
+              <input
+                value={categoryEditValue}
+                onChange={(e) => setCategoryEditValue(e.target.value)}
+                onBlur={() => {
+                  if (categoryEditValue.trim()) setTextCategoryName(categoryEditValue.trim());
+                  setEditingCategory(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (categoryEditValue.trim()) setTextCategoryName(categoryEditValue.trim());
+                    setEditingCategory(null);
+                  }
+                  if (e.key === 'Escape') setEditingCategory(null);
+                }}
+                className="w-full bg-surface-800 border border-brand-500 rounded px-2 py-0.5 text-[11px] font-bold text-surface-200 uppercase tracking-widest focus:outline-none"
+                autoFocus
               />
-            </button>
+            ) : (
+              <button
+                onClick={() => setTextExpanded(!textExpanded)}
+                onDoubleClick={() => { setEditingCategory('text'); setCategoryEditValue(textCategoryName); }}
+                className="flex items-center gap-1 text-[11px] font-bold text-surface-500 uppercase tracking-widest hover:text-surface-300 w-full px-1 py-1 transition-colors"
+              >
+                {textExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                {textCategoryName}
+                <Plus
+                  size={15}
+                  className="ml-auto hover:text-surface-200 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
+                  style={{ opacity: 1 }}
+                  onClick={(e) => { e.stopPropagation(); setShowCreateModal(true); }}
+                />
+              </button>
+            )}
           </div>
 
           {textExpanded && textChannels.map((channel) => (
@@ -730,18 +768,39 @@ const ChannelSidebar: React.FC = () => {
 
           {/* Voice channels */}
           <div className="px-2 mb-1 mt-5">
-            <button
-              onClick={() => setVoiceExpanded(!voiceExpanded)}
-              className="flex items-center gap-1 text-[11px] font-bold text-surface-500 uppercase tracking-widest hover:text-surface-300 w-full px-1 py-1 transition-colors"
-            >
-              {voiceExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-              Canais de Voz
-              <Plus
-                size={15}
-                className="ml-auto hover:text-surface-200 transition-opacity"
-                onClick={(e) => { e.stopPropagation(); setShowCreateModal(true); }}
+            {editingCategory === 'voice' ? (
+              <input
+                value={categoryEditValue}
+                onChange={(e) => setCategoryEditValue(e.target.value)}
+                onBlur={() => {
+                  if (categoryEditValue.trim()) setVoiceCategoryName(categoryEditValue.trim());
+                  setEditingCategory(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (categoryEditValue.trim()) setVoiceCategoryName(categoryEditValue.trim());
+                    setEditingCategory(null);
+                  }
+                  if (e.key === 'Escape') setEditingCategory(null);
+                }}
+                className="w-full bg-surface-800 border border-brand-500 rounded px-2 py-0.5 text-[11px] font-bold text-surface-200 uppercase tracking-widest focus:outline-none"
+                autoFocus
               />
-            </button>
+            ) : (
+              <button
+                onClick={() => setVoiceExpanded(!voiceExpanded)}
+                onDoubleClick={() => { setEditingCategory('voice'); setCategoryEditValue(voiceCategoryName); }}
+                className="flex items-center gap-1 text-[11px] font-bold text-surface-500 uppercase tracking-widest hover:text-surface-300 w-full px-1 py-1 transition-colors"
+              >
+                {voiceExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                {voiceCategoryName}
+                <Plus
+                  size={15}
+                  className="ml-auto hover:text-surface-200 transition-opacity"
+                  onClick={(e) => { e.stopPropagation(); setShowCreateModal(true); }}
+                />
+              </button>
+            )}
           </div>
 
           {voiceExpanded && voiceChannels.map((channel) => {
@@ -851,20 +910,39 @@ const ChannelSidebar: React.FC = () => {
 
 // ── MEMBER LIST PANEL ─────────────────────────────────────────────
 const MemberListPanel: React.FC = () => {
-  const { currentUser } = useChatStore();
+  const { currentUser, getWorkspaceById, getUserById, removeMember } = useChatStore();
+  const { activeWorkspaceId } = useNavigationStore();
   const { onlineUsers } = useConnectionStore();
+  const workspace = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
+  const isOwner = workspace?.ownerId === currentUser?.id;
 
-  const online = CONCORD_USERS.filter((u) => onlineUsers.includes(u.id));
-  const offline = CONCORD_USERS.filter((u) => !onlineUsers.includes(u.id));
+  // Get member user objects from workspace
+  const memberUsers = (workspace?.members ?? []).map((m) => {
+    const user = getUserById(m.userId);
+    return user ?? CONCORD_USERS.find((u) => u.id === m.userId);
+  }).filter(Boolean) as typeof CONCORD_USERS;
+
+  // Fallback to all users if no workspace
+  const allMembers = memberUsers.length > 0 ? memberUsers : CONCORD_USERS;
+
+  const online = allMembers.filter((u) => onlineUsers.includes(u.id));
+  const offline = allMembers.filter((u) => !onlineUsers.includes(u.id));
+
+  const handleRemove = (userId: string) => {
+    if (!activeWorkspaceId) return;
+    removeMember(activeWorkspaceId, userId);
+  };
 
   const renderUser = (user: typeof CONCORD_USERS[0]) => {
     const isOnline = onlineUsers.includes(user.id);
     const isCurrent = currentUser?.id === user.id;
     const displayUser = isCurrent && currentUser ? currentUser : user;
+    const memberData = workspace?.members.find((m) => m.userId === user.id);
+    const canRemove = isOwner && !isCurrent && memberData?.role !== 'owner';
     return (
       <div
         key={user.id}
-        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-800/50 transition-colors cursor-pointer"
+        className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-800/50 transition-colors cursor-pointer group"
       >
         <Avatar
           name={displayUser.displayName}
@@ -877,7 +955,19 @@ const MemberListPanel: React.FC = () => {
           {isCurrent && currentUser?.customStatus && (
             <p className="text-[10px] text-surface-500 truncate">{currentUser.customStatus}</p>
           )}
+          {memberData?.role === 'owner' && (
+            <p className="text-[10px] text-amber-500 truncate">Dono</p>
+          )}
         </div>
+        {canRemove && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleRemove(user.id); }}
+            className="opacity-0 group-hover:opacity-100 text-surface-600 hover:text-red-400 transition-all"
+            title="Remover membro"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
     );
   };

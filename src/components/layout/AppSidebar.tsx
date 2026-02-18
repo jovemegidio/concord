@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   MessageSquare, LayoutGrid, FileText,
-  Palette, Wifi, WifiOff, Plus, LogOut,
+  Palette, Wifi, WifiOff, Plus, LogOut, ImageIcon,
 } from 'lucide-react';
 import { useNavigationStore, useChatStore, useThemeStore, useConnectionStore, CONCORD_USERS } from '@/stores';
 import type { ThemeName } from '@/stores';
@@ -13,8 +13,8 @@ import type { AppView } from '@/types';
 // ── Navigation Items ────────────────────────────────────────
 const NAV_ITEMS: { view: AppView; label: string; icon: React.ReactNode }[] = [
   { view: 'chat', label: 'Chat', icon: <MessageSquare size={22} /> },
-  { view: 'boards', label: 'Quadros', icon: <LayoutGrid size={22} /> },
-  { view: 'pages', label: 'Páginas', icon: <FileText size={22} /> },
+  { view: 'boards', label: 'Kanban', icon: <LayoutGrid size={22} /> },
+  { view: 'pages', label: 'Notas', icon: <FileText size={22} /> },
 ];
 
 // ── Theme names ─────────────────────────────────────────────
@@ -118,10 +118,12 @@ const WorkspaceModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
 export const AppSidebar: React.FC = () => {
   const { currentView, setView, activeWorkspaceId } = useNavigationStore();
   const { getWorkspaceById, currentUser, workspaces } = useChatStore();
-  const { theme, setTheme } = useThemeStore();
+  const { theme, setTheme, wallpaper, setWallpaper } = useThemeStore();
   const { connected, onlineUsers } = useConnectionStore();
   const [showThemes, setShowThemes] = useState(false);
   const [showWorkspaces, setShowWorkspaces] = useState(false);
+  const [showWallpaper, setShowWallpaper] = useState(false);
+  const [wallpaperUrl, setWallpaperUrl] = useState(wallpaper || '');
 
   const workspace = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
   const onlineCount = onlineUsers.length;
@@ -227,6 +229,59 @@ export const AppSidebar: React.FC = () => {
                       {theme === t.name && <span className="ml-auto text-brand-400">✓</span>}
                     </button>
                   ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Wallpaper picker */}
+          <div className="relative">
+            <Tooltip content="Papel de Parede" position="right">
+              <button
+                onClick={() => { setShowWallpaper(!showWallpaper); setWallpaperUrl(wallpaper || ''); }}
+                className={cn(
+                  'w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
+                  wallpaper
+                    ? 'text-brand-400 hover:bg-brand-600/10'
+                    : 'text-surface-500 hover:text-surface-300 hover:bg-surface-800',
+                )}
+              >
+                <ImageIcon size={18} />
+              </button>
+            </Tooltip>
+
+            {showWallpaper && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowWallpaper(false)} />
+                <div className="absolute left-full bottom-0 ml-3 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-50 p-3 min-w-[240px]">
+                  <p className="text-[10px] text-surface-500 uppercase tracking-wider mb-2">Papel de Parede</p>
+                  <input
+                    value={wallpaperUrl}
+                    onChange={(e) => setWallpaperUrl(e.target.value)}
+                    placeholder="Cole a URL da imagem..."
+                    className="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-2 text-xs text-surface-200 placeholder:text-surface-600 focus:outline-none focus:border-brand-500 mb-2"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => { setWallpaper(wallpaperUrl.trim()); setShowWallpaper(false); }}
+                      className="flex-1 px-2 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs rounded-lg transition-colors"
+                    >
+                      Aplicar
+                    </button>
+                    {wallpaper && (
+                      <button
+                        onClick={() => { setWallpaper(''); setWallpaperUrl(''); setShowWallpaper(false); }}
+                        className="px-2 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 text-xs rounded-lg transition-colors"
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                  {wallpaper && (
+                    <div className="mt-2 rounded overflow-hidden h-16">
+                      <img src={wallpaper} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  )}
                 </div>
               </>
             )}

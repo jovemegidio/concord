@@ -159,7 +159,9 @@ const PALETTES: Record<ThemeName, ThemePalette> = {
 
 interface ThemeStore {
   theme: ThemeName;
+  wallpaper: string; // URL for custom background wallpaper
   setTheme: (theme: ThemeName) => void;
+  setWallpaper: (url: string) => void;
   cycleTheme: () => void;
 }
 
@@ -167,9 +169,14 @@ export const useThemeStore = create<ThemeStore>()(
   persist(
     (set, get) => ({
       theme: 'dark',
+      wallpaper: '',
       setTheme: (theme) => {
         set({ theme });
         applyTheme(theme);
+      },
+      setWallpaper: (url) => {
+        set({ wallpaper: url });
+        applyWallpaper(url);
       },
       cycleTheme: () => {
         const names: ThemeName[] = ['dark', 'midnight', 'light', 'forest', 'sunset', 'ocean', 'rose', 'cyberpunk', 'nord', 'dracula'];
@@ -210,16 +217,30 @@ export function applyTheme(themeName: ThemeName) {
   }
 }
 
+export function applyWallpaper(url: string) {
+  const root = document.documentElement;
+  if (url) {
+    root.style.setProperty('--wallpaper-url', `url(${url})`);
+    root.setAttribute('data-wallpaper', 'true');
+  } else {
+    root.style.removeProperty('--wallpaper-url');
+    root.removeAttribute('data-wallpaper');
+  }
+}
+
 export function initTheme() {
   const stored = localStorage.getItem('concord-theme');
   let theme: ThemeName = 'dark';
+  let wallpaper = '';
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
       theme = parsed.state?.theme ?? 'dark';
+      wallpaper = parsed.state?.wallpaper ?? '';
     } catch {
       // ignore
     }
   }
   applyTheme(theme);
+  applyWallpaper(wallpaper);
 }

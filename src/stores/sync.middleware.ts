@@ -67,10 +67,23 @@ class SyncManager {
         switch (msg.type) {
           case 'init': {
             // Server sends full state snapshot on connect
+            // Use replace (2nd arg = true) so cached/stale local state is fully overwritten
             this.isSyncing = true;
-            for (const [name, { store }] of this.stores) {
+            for (const [name, { store, exclude }] of this.stores) {
               if (msg.state[name]) {
-                store.setState(msg.state[name]);
+                // Preserve excluded fields (e.g. currentUser) from local state
+                const current = store.getState() as Record<string, unknown>;
+                const preserved: Record<string, unknown> = {};
+                if (exclude) {
+                  for (const key of exclude) {
+                    if (current[key] !== undefined) preserved[key] = current[key];
+                  }
+                }
+                // Also preserve all functions from current state
+                for (const key of Object.keys(current)) {
+                  if (typeof current[key] === 'function') preserved[key] = current[key];
+                }
+                store.setState({ ...preserved, ...msg.state[name] }, true);
               }
             }
             this.isSyncing = false;

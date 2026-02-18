@@ -38,6 +38,30 @@
     transition: background-color 0.3s ease, color 0.3s ease;
   }
 
+  /* Wallpaper overlay */
+  [data-wallpaper='true'] body {
+    background-image: var(--wallpaper-url);
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  [data-wallpaper='true'] body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: var(--surface-950, #020617);
+    opacity: 0.65;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  [data-wallpaper='true'] body > #root {
+    position: relative;
+    z-index: 1;
+  }
+
   /* Content-editable placeholder */
   [contenteditable='true']:empty::before {
     content: attr(data-placeholder);
