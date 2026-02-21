@@ -629,3 +629,46 @@ syncManager.on('channel:deleted', (data) => {
     }
   });
 });
+
+// Voice events from remote users
+syncManager.onVoice((data) => {
+  const type = data.type as string;
+  const userId = data.userId as string;
+
+  switch (type) {
+    case 'voice:join': {
+      const channelId = data.channelId as string;
+      useChatStore.setState((s) => {
+        // Remove any existing connection for this user
+        s.voiceConnections = s.voiceConnections.filter((vc) => vc.userId !== userId);
+        s.voiceConnections.push({ channelId, userId, isMuted: false, isDeafened: false, isSpeaking: false });
+      });
+      break;
+    }
+    case 'voice:leave': {
+      useChatStore.setState((s) => {
+        s.voiceConnections = s.voiceConnections.filter((vc) => vc.userId !== userId);
+      });
+      break;
+    }
+    case 'voice:mute': {
+      const muted = data.muted as boolean;
+      useChatStore.setState((s) => {
+        const vc = s.voiceConnections.find((v) => v.userId === userId);
+        if (vc) vc.isMuted = muted;
+      });
+      break;
+    }
+    case 'voice:deafen': {
+      const deafened = data.deafened as boolean;
+      useChatStore.setState((s) => {
+        const vc = s.voiceConnections.find((v) => v.userId === userId);
+        if (vc) {
+          vc.isDeafened = deafened;
+          if (deafened) vc.isMuted = true;
+        }
+      });
+      break;
+    }
+  }
+});

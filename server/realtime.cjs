@@ -104,6 +104,34 @@ function createRealtimeServer(server) {
             break;
           }
 
+          // ── WebRTC Signaling (peer-targeted) ──────────────
+          case 'webrtc:offer': {
+            sendToUser(msg.targetUserId, {
+              type: 'webrtc:offer',
+              fromUserId: ws.userId,
+              offer: msg.offer,
+            });
+            break;
+          }
+
+          case 'webrtc:answer': {
+            sendToUser(msg.targetUserId, {
+              type: 'webrtc:answer',
+              fromUserId: ws.userId,
+              answer: msg.answer,
+            });
+            break;
+          }
+
+          case 'webrtc:ice-candidate': {
+            sendToUser(msg.targetUserId, {
+              type: 'webrtc:ice-candidate',
+              fromUserId: ws.userId,
+              candidate: msg.candidate,
+            });
+            break;
+          }
+
           default:
             break;
         }
@@ -154,6 +182,15 @@ function createRealtimeServer(server) {
     const raw = JSON.stringify(message);
     for (const [ws] of clients) {
       if (ws !== sender && ws.readyState === 1) {
+        try { ws.send(raw); } catch { /* ignore */ }
+      }
+    }
+  }
+
+  function sendToUser(targetUserId, message) {
+    const raw = JSON.stringify(message);
+    for (const [ws, client] of clients) {
+      if (client.userId === targetUserId && ws.readyState === 1) {
         try { ws.send(raw); } catch { /* ignore */ }
       }
     }

@@ -37,6 +37,7 @@ class SyncManager {
   private typingListeners: Array<(data: { channelId: string; userId: string; displayName: string; isTyping: boolean }) => void> = [];
   private speakingListeners: Array<(data: { userId: string; speaking: boolean }) => void> = [];
   private voiceListeners: Array<(data: Record<string, unknown>) => void> = [];
+  private webrtcListeners: Array<(data: Record<string, unknown>) => void> = [];
 
   connect() {
     const token = getAccessToken();
@@ -85,6 +86,12 @@ class SyncManager {
           case 'voice:mute':
           case 'voice:deafen':
             this.voiceListeners.forEach((fn) => fn(msg));
+            break;
+
+          case 'webrtc:offer':
+          case 'webrtc:answer':
+          case 'webrtc:ice-candidate':
+            this.webrtcListeners.forEach((fn) => fn(msg));
             break;
 
           default: {
@@ -190,6 +197,14 @@ class SyncManager {
     this.voiceListeners.push(listener);
     return () => {
       this.voiceListeners = this.voiceListeners.filter((fn) => fn !== listener);
+    };
+  }
+
+  // ── WebRTC Signaling ────────────────────────────────────
+  onWebRTC(listener: (data: Record<string, unknown>) => void) {
+    this.webrtcListeners.push(listener);
+    return () => {
+      this.webrtcListeners = this.webrtcListeners.filter((fn) => fn !== listener);
     };
   }
 
