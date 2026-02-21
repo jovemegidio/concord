@@ -6,7 +6,7 @@ import { AuthScreen } from './AuthScreen';
 import { ChatView } from '@/modules/chat';
 import { BoardView } from '@/modules/board';
 import { PagesView } from '@/modules/pages';
-import { Button } from '@/components/ui';
+import { Button, ErrorBoundary } from '@/components/ui';
 
 const VIEW_MAP = {
   chat: ChatView,
@@ -175,7 +175,9 @@ export const AppLayout: React.FC = () => {
     <div className="h-screen w-screen flex overflow-hidden">
       <AppSidebar />
       <main className="flex-1 flex min-w-0">
-        <ActiveView />
+        <ErrorBoundary module={currentView}>
+          <ActiveView />
+        </ErrorBoundary>
       </main>
     </div>
   );
