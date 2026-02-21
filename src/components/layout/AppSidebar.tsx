@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   MessageSquare, LayoutGrid, FileText,
-  Palette, Wifi, WifiOff, Plus, LogOut, ImageIcon,
+  Palette, Wifi, WifiOff, Plus, LogOut, ImageIcon, Upload,
 } from 'lucide-react';
 import { useNavigationStore, useChatStore, useThemeStore, useConnectionStore, CONCORD_USERS } from '@/stores';
 import type { ThemeName } from '@/stores';
@@ -124,6 +124,25 @@ export const AppSidebar: React.FC = () => {
   const [showWorkspaces, setShowWorkspaces] = useState(false);
   const [showWallpaper, setShowWallpaper] = useState(false);
   const [wallpaperUrl, setWallpaperUrl] = useState(wallpaper || '');
+  const wallpaperFileRef = useRef<HTMLInputElement>(null);
+
+  const handleWallpaperFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      alert('Imagem muito grande! Máximo 4MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setWallpaper(result);
+      setWallpaperUrl('');
+      setShowWallpaper(false);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   const workspace = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
   const onlineCount = onlineUsers.length;
@@ -255,6 +274,29 @@ export const AppSidebar: React.FC = () => {
                 <div className="fixed inset-0 z-40" onClick={() => setShowWallpaper(false)} />
                 <div className="absolute left-full bottom-0 ml-3 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-50 p-3 min-w-[240px]">
                   <p className="text-[10px] text-surface-500 uppercase tracking-wider mb-2">Papel de Parede</p>
+
+                  {/* File upload button */}
+                  <input
+                    ref={wallpaperFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleWallpaperFile}
+                  />
+                  <button
+                    onClick={() => wallpaperFileRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 bg-surface-700 hover:bg-surface-600 text-surface-200 rounded-lg px-3 py-2 text-xs transition-colors mb-2"
+                  >
+                    <Upload size={14} />
+                    Importar do computador
+                  </button>
+
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex-1 h-px bg-surface-700" />
+                    <span className="text-[10px] text-surface-500">ou</span>
+                    <div className="flex-1 h-px bg-surface-700" />
+                  </div>
+
                   <input
                     value={wallpaperUrl}
                     onChange={(e) => setWallpaperUrl(e.target.value)}

@@ -834,12 +834,27 @@ export const PagesView: React.FC = () => {
   const { activePageId, setActivePage } = useNavigationStore();
   const { getPageById } = usePagesStore();
 
+  const { activeWorkspaceId } = useNavigationStore();
+  const rootPages = activeWorkspaceId ? usePagesStore.getState().getRootPages(activeWorkspaceId) : [];
   const page = activePageId ? getPageById(activePageId) : undefined;
 
-  // Clear stale active page reference
+  // Clear stale active page reference or page from wrong workspace
   useEffect(() => {
-    if (activePageId && !page) setActivePage(null);
-  }, [activePageId, page, setActivePage]);
+    if (activePageId) {
+      if (!page) {
+        setActivePage(null);
+      } else if (activeWorkspaceId && page.workspaceId !== activeWorkspaceId) {
+        setActivePage(null);
+      }
+    }
+  }, [activePageId, page, activeWorkspaceId, setActivePage]);
+
+  // Auto-select first page if none is active and pages exist
+  useEffect(() => {
+    if (!activePageId && rootPages.length > 0) {
+      setActivePage(rootPages[0].id);
+    }
+  }, [activePageId, rootPages, setActivePage]);
 
   return (
     <div className="flex flex-1 min-w-0">

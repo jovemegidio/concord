@@ -121,14 +121,13 @@ export const NotificationWatcher: React.FC = () => {
     // New message
     if (totalMessages > prevMessages.current) {
       // Find the newest message
-      let newest: { authorId: string; content: string; channelName: string } | null = null;
+      let newest: { authorId: string; content: string; channelName: string; createdAt: number } | null = null;
       for (const ws of workspaces) {
         for (const ch of ws.channels) {
           if (ch.messages.length > 0) {
             const last = ch.messages[ch.messages.length - 1];
-            if (!newest || last.createdAt > (newest as unknown as { createdAt: number }).createdAt) {
-              newest = { authorId: last.authorId, content: last.content, channelName: ch.name };
-              (newest as unknown as { createdAt: number }).createdAt = last.createdAt;
+            if (!newest || last.createdAt > newest.createdAt) {
+              newest = { authorId: last.authorId, content: last.content, channelName: ch.name, createdAt: last.createdAt };
             }
           }
         }

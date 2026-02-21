@@ -670,12 +670,27 @@ export const BoardView: React.FC = () => {
   const [addingCol, setAddingCol] = useState(false);
   const [dragState, setDragState] = useState<{ cardId: ID; fromColumnId: ID } | null>(null);
 
+  const { activeWorkspaceId } = useNavigationStore();
+  const boards = activeWorkspaceId ? useBoardStore.getState().getBoardsByWorkspace(activeWorkspaceId) : [];
   const board = activeBoardId ? getBoardById(activeBoardId) : undefined;
 
-  // Clear stale active board reference
+  // Clear stale active board reference or board from wrong workspace
   useEffect(() => {
-    if (activeBoardId && !board) setActiveBoard(null);
-  }, [activeBoardId, board, setActiveBoard]);
+    if (activeBoardId) {
+      if (!board) {
+        setActiveBoard(null);
+      } else if (activeWorkspaceId && board.workspaceId !== activeWorkspaceId) {
+        setActiveBoard(null);
+      }
+    }
+  }, [activeBoardId, board, activeWorkspaceId, setActiveBoard]);
+
+  // Auto-select first board if none is active and boards exist
+  useEffect(() => {
+    if (!activeBoardId && boards.length > 0) {
+      setActiveBoard(boards[0].id);
+    }
+  }, [activeBoardId, boards, setActiveBoard]);
 
   const handleAddColumn = () => {
     if (!newColTitle.trim() || !activeBoardId) return;

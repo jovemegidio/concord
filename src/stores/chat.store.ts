@@ -456,7 +456,7 @@ export const useChatStore = create<ChatStore>()(
       name: 'concord-chat',
       partialize: (state) => ({
         currentUser: state.currentUser,
-        // workspaces, voice, typing come from the server
+        workspaces: state.workspaces,
       }),
     },
   ),

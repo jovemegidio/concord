@@ -188,6 +188,16 @@ wss.on('connection', (ws) => {
         sharedState.chat.voiceConnections = sharedState.chat.voiceConnections.filter(
           (vc) => vc.userId !== userId
         );
+        // Also clean up typing users
+        if (sharedState.chat.typingUsers) {
+          for (const channelId of Object.keys(sharedState.chat.typingUsers)) {
+            if (Array.isArray(sharedState.chat.typingUsers[channelId])) {
+              sharedState.chat.typingUsers[channelId] = sharedState.chat.typingUsers[channelId].filter(
+                (id) => id !== userId
+              );
+            }
+          }
+        }
         if (sharedState.chat.voiceConnections.length !== before) {
           persist();
           // Broadcast updated chat state to remaining clients

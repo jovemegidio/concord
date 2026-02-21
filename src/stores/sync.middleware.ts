@@ -69,10 +69,37 @@ class SyncManager {
             // Server sends full state snapshot on connect
             // Use replace (2nd arg = true) so cached/stale local state is fully overwritten
             this.isSyncing = true;
+            const storesToPush: Array<{ name: string; state: Record<string, unknown> }> = [];
+
             for (const [name, { store, exclude }] of this.stores) {
-              if (msg.state[name]) {
-                // Preserve excluded fields (e.g. currentUser) from local state
-                const current = store.getState() as Record<string, unknown>;
+              const current = store.getState() as Record<string, unknown>;
+              const serverState = msg.state[name];
+
+              // Check if server state is empty/null but client has data from localStorage
+              const serverIsEmpty = !serverState || (typeof serverState === 'object' && Object.keys(serverState).length === 0);
+
+              // Generic check: does the client have any meaningful data in this store?
+              // Works for chat (workspaces), boards (boards), pages (pages), etc.
+              const clientHasData = Object.keys(current).some((key) => {
+                if (typeof current[key] === 'function') return false;
+                if (exclude?.includes(key)) return false;
+                if (Array.isArray(current[key]) && (current[key] as unknown[]).length > 0) return true;
+                if (current[key] && typeof current[key] === 'object' && Object.keys(current[key] as object).length > 0) return true;
+                return false;
+              });
+
+              if (serverIsEmpty && clientHasData) {
+                // Client has persisted data but server lost it (e.g. Render restart)
+                // Push client state to server instead of wiping it
+                const filtered: Record<string, unknown> = {};
+                for (const key of Object.keys(current)) {
+                  if (typeof current[key] === 'function') continue;
+                  if (exclude?.includes(key)) continue;
+                  filtered[key] = current[key];
+                }
+                storesToPush.push({ name, state: filtered });
+              } else if (serverState) {
+                // Server has data — merge normally
                 const preserved: Record<string, unknown> = {};
                 if (exclude) {
                   for (const key of exclude) {
@@ -83,11 +110,25 @@ class SyncManager {
                 for (const key of Object.keys(current)) {
                   if (typeof current[key] === 'function') preserved[key] = current[key];
                 }
-                store.setState({ ...preserved, ...msg.state[name] }, true);
+                store.setState({ ...preserved, ...serverState }, true);
               }
             }
             this.isSyncing = false;
             this.ready = true; // Now safe to broadcast local changes
+
+            // Push any client-side persisted state back to server
+            for (const item of storesToPush) {
+              try {
+                this.ws?.send(JSON.stringify({
+                  type: 'sync',
+                  store: item.name,
+                  state: item.state,
+                }));
+              } catch {
+                // ignore
+              }
+            }
+
             useConnectionStore.getState()._setInitialSyncDone(true);
             break;
           }

@@ -243,6 +243,17 @@ export const AppLayout: React.FC = () => {
     }
   }, [isValidUser, initialSyncDone]);
 
+  // Timeout: if server doesn't respond within 3s, proceed with local state
+  useEffect(() => {
+    if (initialSyncDone) return;
+    const timeout = setTimeout(() => {
+      if (!useConnectionStore.getState().initialSyncDone) {
+        useConnectionStore.getState()._setInitialSyncDone(true);
+      }
+    }, 3000);
+    return () => clearTimeout(timeout);
+  }, [initialSyncDone]);
+
   // Auto-select a workspace if current one was deleted
   useEffect(() => {
     if (!isValidUser || workspaces.length === 0) return;
@@ -270,6 +281,7 @@ export const AppLayout: React.FC = () => {
             <img src="/concord-logo.png" alt="Concord" className="w-14 h-14 object-contain" />
           </div>
           <p className="text-surface-400 text-sm animate-pulse">Conectando ao servidor...</p>
+          <p className="text-surface-600 text-xs mt-2">Aguarde ou continue sem conexão</p>
         </div>
       </div>
     );
