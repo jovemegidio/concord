@@ -3,7 +3,11 @@ services:
     name: concord
     runtime: node
     plan: free
-    buildCommand: npm install --include=dev && npm run build
+    disk:
+      name: concord-data
+      mountPath: /data
+      sizeGB: 1
+    buildCommand: npm install --include=dev && npm rebuild better-sqlite3 && npm run build
     startCommand: node server/index.cjs
     envVars:
       - key: NODE_ENV
@@ -12,3 +16,9 @@ services:
         value: 20.11.0
       - key: RENDER
         value: "true"
+      - key: NO_TUNNEL
+        value: "1"
+      - key: DB_PATH
+        value: /data/concord.db
+      - key: JWT_SECRET
+        generateValue: true
