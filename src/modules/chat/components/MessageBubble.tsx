@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SmilePlus, Pin, Edit3, Trash2, Check, X } from 'lucide-react';
+import { SmilePlus, Pin, Edit3, Trash2, Check, X, Reply } from 'lucide-react';
 import { useChatStore, useNavigationStore } from '@/stores';
 import { Avatar, IconButton } from '@/components/ui';
 import { cn } from '@/lib/cn';
@@ -49,7 +49,9 @@ export const MessageBubble: React.FC<{
   message: Message;
   showAvatar: boolean;
   onUserClick?: (user: User) => void;
-}> = ({ message, showAvatar, onUserClick }) => {
+  onReply?: (message: Message) => void;
+  allMessages?: Message[];
+}> = ({ message, showAvatar, onUserClick, onReply, allMessages = [] }) => {
   const [showActions, setShowActions] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -59,6 +61,12 @@ export const MessageBubble: React.FC<{
   const author = getUserById(message.authorId);
   const isOwn = currentUser?.id === message.authorId;
   const authorName = author?.displayName ?? message.authorId;
+
+  // Find replied-to message
+  const repliedMessage = message.replyToId
+    ? allMessages.find((m) => m.id === message.replyToId)
+    : undefined;
+  const repliedAuthor = repliedMessage ? getUserById(repliedMessage.authorId) : undefined;
 
   const handleEditSave = () => {
     if (!activeWorkspaceId || !editContent.trim()) return;
@@ -90,6 +98,27 @@ export const MessageBubble: React.FC<{
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => { setShowActions(false); setShowEmoji(false); }}
     >
+      {/* Reply reference */}
+      {repliedMessage && (
+        <div className="flex items-center gap-1.5 ml-11 mb-1 text-xs text-surface-500">
+          <div className="w-6 flex items-center justify-center">
+            <Reply size={12} className="text-surface-600 rotate-180" />
+          </div>
+          <Avatar
+            name={repliedAuthor?.displayName ?? repliedMessage.authorId}
+            src={repliedAuthor?.avatar || undefined}
+            size="xs"
+            className="w-4 h-4"
+          />
+          <span className="font-medium text-surface-400">
+            {repliedAuthor?.displayName ?? repliedMessage.authorId}
+          </span>
+          <span className="text-surface-500 truncate max-w-[300px]">
+            {repliedMessage.content}
+          </span>
+        </div>
+      )}
+
       <div className="flex items-start gap-3">
         {showAvatar ? (
           <button onClick={() => author && onUserClick?.(author)} className="hover:opacity-80 transition-opacity">
@@ -169,6 +198,13 @@ export const MessageBubble: React.FC<{
             </button>
             {showEmoji && <EmojiPicker onSelect={handleReaction} onClose={() => setShowEmoji(false)} />}
           </div>
+          <button
+            onClick={() => onReply?.(message)}
+            className="p-1.5 hover:bg-surface-700 text-surface-400 hover:text-surface-200 transition-colors"
+            title="Responder"
+          >
+            <Reply size={14} />
+          </button>
           <button
             onClick={handlePin}
             className="p-1.5 hover:bg-surface-700 text-surface-400 hover:text-surface-200 transition-colors"

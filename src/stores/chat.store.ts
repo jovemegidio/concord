@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import { syncManager } from './sync.middleware';
 import { api } from '@/lib/api';
-import type { User, Workspace, Channel, Message, ID, ChannelType, UserStatus } from '@/types';
+import type { User, Workspace, Channel, Message, ID, ChannelType, ChannelCategory, UserStatus } from '@/types';
 import { generateId } from '@/lib/utils';
 
 // ── Predefined Users (for login dropdown — real auth goes through API) ──
@@ -39,6 +39,7 @@ function createZyntraWorkspace(): Workspace {
       { id: 'ch-zyntra-anuncios', workspaceId: ZYNTRA_WORKSPACE_ID, name: 'anúncios', description: 'Comunicados importantes', type: 'announcement', messages: [], pinnedMessageIds: [], createdAt: 0 },
       { id: 'ch-zyntra-voice', workspaceId: ZYNTRA_WORKSPACE_ID, name: 'Bate-papo de Voz', description: 'Canal de voz', type: 'voice', messages: [], pinnedMessageIds: [], createdAt: 0 },
     ],
+    categories: [],
     boards: [],
     pages: [],
     createdAt: 0,
@@ -84,8 +85,14 @@ interface ChatStore {
   getChannelById: (workspaceId: ID, channelId: ID) => Channel | undefined;
   getChannelMessages: (workspaceId: ID, channelId: ID) => Message[];
 
+  // Channel Categories
+  createCategory: (workspaceId: ID, name: string, type: 'text' | 'voice') => ID;
+  renameCategory: (categoryId: ID, name: string) => void;
+  deleteCategory: (categoryId: ID) => void;
+  loadCategories: (workspaceId: ID) => Promise<void>;
+
   // Message
-  sendMessage: (workspaceId: ID, channelId: ID, content: string) => void;
+  sendMessage: (workspaceId: ID, channelId: ID, content: string, replyToId?: ID) => void;
   editMessage: (workspaceId: ID, channelId: ID, messageId: ID, newContent: string) => void;
   deleteMessage: (workspaceId: ID, channelId: ID, messageId: ID) => void;
   toggleReaction: (workspaceId: ID, channelId: ID, messageId: ID, emoji: string) => void;
@@ -212,6 +219,7 @@ export const useChatStore = create<ChatStore>()(
             ownerId: s.currentUser.id,
             members: [{ userId: s.currentUser.id, role: 'owner', joinedAt: Date.now() }],
             channels: [],
+            categories: [],
             boards: [],
             pages: [],
             createdAt: Date.now(),
@@ -322,8 +330,63 @@ export const useChatStore = create<ChatStore>()(
         return ch?.messages ?? [];
       },
 
+      // ── Channel Categories ──
+      createCategory: (workspaceId, name, type) => {
+        const id = generateId();
+        set((s) => {
+          const ws = s.workspaces.find((w) => w.id === workspaceId);
+          if (!ws) return;
+          if (!ws.categories) ws.categories = [];
+          ws.categories.push({
+            id,
+            workspaceId,
+            name,
+            type,
+            position: ws.categories.length,
+            createdAt: Date.now(),
+          });
+        });
+        api.post(`/workspaces/${workspaceId}/categories`, { id, name, type }).catch(() => {});
+        return id;
+      },
+
+      renameCategory: (categoryId, name) => {
+        set((s) => {
+          for (const ws of s.workspaces) {
+            const cat = ws.categories?.find((c) => c.id === categoryId);
+            if (cat) { cat.name = name; break; }
+          }
+        });
+        api.patch(`/categories/${categoryId}`, { name }).catch(() => {});
+      },
+
+      deleteCategory: (categoryId) => {
+        set((s) => {
+          for (const ws of s.workspaces) {
+            if (ws.categories) {
+              ws.categories = ws.categories.filter((c) => c.id !== categoryId);
+            }
+          }
+        });
+        api.delete(`/categories/${categoryId}`).catch(() => {});
+      },
+
+      loadCategories: async (workspaceId) => {
+        try {
+          const categories = await api.get<ChannelCategory[]>(`/workspaces/${workspaceId}/categories`);
+          if (categories) {
+            set((s) => {
+              const ws = s.workspaces.find((w) => w.id === workspaceId);
+              if (ws) ws.categories = categories;
+            });
+          }
+        } catch {
+          // Keep local data on failure
+        }
+      },
+
       // ── Message ──
-      sendMessage: (workspaceId, channelId, content) => {
+      sendMessage: (workspaceId, channelId, content, replyToId) => {
         const id = generateId();
         set((s) => {
           const ws = s.workspaces.find((w) => w.id === workspaceId);
@@ -338,10 +401,11 @@ export const useChatStore = create<ChatStore>()(
             reactions: [],
             isPinned: false,
             isEdited: false,
+            replyToId,
             createdAt: Date.now(),
           });
         });
-        api.post(`/channels/${channelId}/messages`, { id, content }).catch(() => {});
+        api.post(`/channels/${channelId}/messages`, { id, content, replyToId }).catch(() => {});
       },
 
       editMessage: (workspaceId, channelId, messageId, newContent) => {
@@ -655,6 +719,43 @@ syncManager.on('channel:deleted', (data) => {
     const ws = s.workspaces.find((w) => w.id === workspaceId);
     if (ws) {
       ws.channels = ws.channels.filter((c) => c.id !== channelId);
+    }
+  });
+});
+
+// Categories
+syncManager.on('category:created', (data) => {
+  const { category, workspaceId } = data as { category: ChannelCategory; workspaceId: string };
+  if (!category) return;
+  useChatStore.setState((s) => {
+    const ws = s.workspaces.find((w) => w.id === workspaceId);
+    if (ws) {
+      if (!ws.categories) ws.categories = [];
+      if (!ws.categories.some((c) => c.id === category.id)) {
+        ws.categories.push(category);
+      }
+    }
+  });
+});
+
+syncManager.on('category:updated', (data) => {
+  const { category, workspaceId } = data as { category: ChannelCategory; workspaceId: string };
+  if (!category) return;
+  useChatStore.setState((s) => {
+    const ws = s.workspaces.find((w) => w.id === workspaceId);
+    if (ws && ws.categories) {
+      const idx = ws.categories.findIndex((c) => c.id === category.id);
+      if (idx >= 0) ws.categories[idx] = category;
+    }
+  });
+});
+
+syncManager.on('category:deleted', (data) => {
+  const { categoryId, workspaceId } = data as { categoryId: string; workspaceId: string };
+  useChatStore.setState((s) => {
+    const ws = s.workspaces.find((w) => w.id === workspaceId);
+    if (ws && ws.categories) {
+      ws.categories = ws.categories.filter((c) => c.id !== categoryId);
     }
   });
 });

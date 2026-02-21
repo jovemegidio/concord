@@ -1,8 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send } from 'lucide-react';
+import { Send, X, Reply } from 'lucide-react';
 import { useNavigationStore, useChatStore, syncManager } from '@/stores';
+import type { Message } from '@/types';
 
-export const MessageInput: React.FC<{ channelName: string }> = ({ channelName }) => {
+export const MessageInput: React.FC<{
+  channelName: string;
+  replyTo?: Message | null;
+  onCancelReply?: () => void;
+}> = ({ channelName, replyTo, onCancelReply }) => {
   const [content, setContent] = useState('');
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -44,6 +49,13 @@ export const MessageInput: React.FC<{ channelName: string }> = ({ channelName })
     setTypingUsers([]);
   }, [activeChannelId]);
 
+  // Focus input when replying
+  useEffect(() => {
+    if (replyTo) {
+      inputRef.current?.focus();
+    }
+  }, [replyTo]);
+
   const broadcastTyping = useCallback((typing: boolean) => {
     if (!activeChannelId || !currentUser) return;
     if (typing === isTypingRef.current) return;
@@ -60,12 +72,15 @@ export const MessageInput: React.FC<{ channelName: string }> = ({ channelName })
 
   const handleSend = () => {
     if (!content.trim() || !activeWorkspaceId || !activeChannelId) return;
-    sendMessage(activeWorkspaceId, activeChannelId, content.trim());
+    sendMessage(activeWorkspaceId, activeChannelId, content.trim(), replyTo?.id);
     setContent('');
     broadcastTyping(false);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    onCancelReply?.();
     inputRef.current?.focus();
   };
+
+  const replyAuthor = replyTo ? getUserById(replyTo.authorId) : undefined;
 
   const typingNames = typingUsers
     .map((id) => getUserById(id)?.displayName ?? id)
@@ -95,13 +110,36 @@ export const MessageInput: React.FC<{ channelName: string }> = ({ channelName })
         )}
       </div>
 
-      <div className="flex items-center bg-surface-800 rounded-lg border border-surface-700 focus-within:border-surface-600 transition-colors">
+      {/* Reply preview banner */}
+      {replyTo && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-surface-800/80 border border-surface-700 rounded-t-lg border-b-0">
+          <Reply size={14} className="text-brand-400 shrink-0" />
+          <span className="text-xs text-surface-400">Respondendo a</span>
+          <span className="text-xs font-medium text-surface-200">
+            {replyAuthor?.displayName ?? replyTo.authorId}
+          </span>
+          <span className="text-xs text-surface-500 truncate flex-1 max-w-[300px]">
+            {replyTo.content}
+          </span>
+          <button
+            onClick={onCancelReply}
+            className="p-0.5 text-surface-500 hover:text-surface-300 transition-colors shrink-0"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      <div className={`flex items-center bg-surface-800 border border-surface-700 focus-within:border-surface-600 transition-colors ${replyTo ? 'rounded-b-lg rounded-t-none' : 'rounded-lg'}`}>
         <input
           ref={inputRef}
           value={content}
           onChange={handleChange}
-          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder={`Mensagem #${channelName}`}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) handleSend();
+            if (e.key === 'Escape' && replyTo) onCancelReply?.();
+          }}
+          placeholder={replyTo ? `Responder a ${replyAuthor?.displayName ?? replyTo.authorId}...` : `Mensagem #${channelName}`}
           className="flex-1 bg-transparent px-4 py-3 text-sm text-surface-200 placeholder:text-surface-600 focus:outline-none"
         />
         <button

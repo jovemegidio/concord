@@ -1,7 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigationStore, useChatStore, syncManager } from '@/stores';
-import { useBoardStore } from '@/stores/board.store';
-import { usePagesStore } from '@/stores/pages.store';
+import { useNavigationStore, useChatStore } from '@/stores';
 import {
   ChannelSidebar,
   ChannelHeader,
@@ -20,6 +18,7 @@ export const ChatView: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showMembers, setShowMembers] = useState(false);
   const [profilePopupUser, setProfilePopupUser] = useState<User | null>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
 
   const channel =
     activeWorkspaceId && activeChannelId
@@ -36,6 +35,7 @@ export const ChatView: React.FC = () => {
     if (activeChannelId && channel && channel.type !== 'voice') {
       loadMessages(activeChannelId);
     }
+    setReplyTo(null);
   }, [activeChannelId, channel?.type, loadMessages]);
 
   useEffect(() => {
@@ -75,13 +75,15 @@ export const ChatView: React.FC = () => {
                             message={msg}
                             showAvatar={shouldShowAvatar(msg, messages[i - 1])}
                             onUserClick={(user) => setProfilePopupUser(user)}
+                            onReply={(msg) => setReplyTo(msg)}
+                            allMessages={messages}
                           />
                         ))}
                         <div ref={messagesEndRef} />
                       </div>
                     )}
                   </div>
-                  <MessageInput channelName={channel.name} />
+                  <MessageInput channelName={channel.name} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
                 </div>
                 {showMembers && <MemberListPanel />}
               </div>

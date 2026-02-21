@@ -42,6 +42,7 @@ export interface Workspace {
   ownerId: ID;
   members: WorkspaceMember[];
   channels: Channel[];
+  categories: ChannelCategory[];
   boards: ID[];
   pages: ID[];
   createdAt: Timestamp;
@@ -54,6 +55,15 @@ export interface WorkspaceMember {
 }
 
 // ── Chat Module (Discord-like) ──────────────────────────────
+export interface ChannelCategory {
+  id: ID;
+  workspaceId: ID;
+  name: string;
+  type: 'text' | 'voice';
+  position: number;
+  createdAt: Timestamp;
+}
+
 export interface Channel {
   id: ID;
   workspaceId: ID;
@@ -62,6 +72,7 @@ export interface Channel {
   type: ChannelType;
   messages: Message[];
   pinnedMessageIds: ID[];
+  categoryId?: ID;
   createdAt: Timestamp;
 }
 

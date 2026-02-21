@@ -113,6 +113,59 @@ function createApiRouter(broadcast) {
   });
 
   // ═══════════════════════════════════════════════════════════
+  // CHANNEL CATEGORIES
+  // ═══════════════════════════════════════════════════════════
+  router.get('/workspaces/:wid/categories', (req, res) => {
+    const db = getDb();
+    const categories = db.prepare('SELECT * FROM channel_categories WHERE workspace_id = ? ORDER BY position').all(req.params.wid);
+    res.json(categories.map(hydrateCategory));
+  });
+
+  router.post('/workspaces/:wid/categories', (req, res) => {
+    const { id, name, type } = req.body;
+    if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
+
+    const db = getDb();
+    const catId = id || genId();
+    const maxPos = db.prepare('SELECT MAX(position) as m FROM channel_categories WHERE workspace_id = ?').get(req.params.wid);
+
+    db.prepare('INSERT INTO channel_categories (id, workspace_id, name, type, position, created_at) VALUES (?,?,?,?,?,?)')
+      .run(catId, req.params.wid, name, type || 'text', (maxPos.m ?? -1) + 1, Date.now());
+
+    const cat = db.prepare('SELECT * FROM channel_categories WHERE id = ?').get(catId);
+    broadcast(req.userId, { type: 'category:created', category: hydrateCategory(cat), workspaceId: req.params.wid });
+    res.status(201).json(hydrateCategory(cat));
+  });
+
+  router.patch('/categories/:id', (req, res) => {
+    const { name, position } = req.body;
+    const db = getDb();
+    const sets = [];
+    const vals = [];
+
+    if (name !== undefined) { sets.push('name = ?'); vals.push(name); }
+    if (position !== undefined) { sets.push('position = ?'); vals.push(position); }
+
+    if (sets.length === 0) return res.status(400).json({ error: 'Nenhum campo' });
+    vals.push(req.params.id);
+    db.prepare(`UPDATE channel_categories SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+
+    const cat = db.prepare('SELECT * FROM channel_categories WHERE id = ?').get(req.params.id);
+    broadcast(req.userId, { type: 'category:updated', category: hydrateCategory(cat), workspaceId: cat.workspace_id });
+    res.json(hydrateCategory(cat));
+  });
+
+  router.delete('/categories/:id', (req, res) => {
+    const db = getDb();
+    const cat = db.prepare('SELECT workspace_id FROM channel_categories WHERE id = ?').get(req.params.id);
+    // Unlink channels from this category
+    db.prepare('UPDATE channels SET category_id = NULL WHERE category_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM channel_categories WHERE id = ?').run(req.params.id);
+    broadcast(req.userId, { type: 'category:deleted', categoryId: req.params.id, workspaceId: cat?.workspace_id });
+    res.json({ ok: true });
+  });
+
+  // ═══════════════════════════════════════════════════════════
   // CHANNELS
   // ═══════════════════════════════════════════════════════════
   router.get('/workspaces/:wid/channels', (req, res) => {
@@ -122,15 +175,15 @@ function createApiRouter(broadcast) {
   });
 
   router.post('/workspaces/:wid/channels', (req, res) => {
-    const { id, name, type, description } = req.body;
+    const { id, name, type, description, categoryId } = req.body;
     if (!name) return res.status(400).json({ error: 'Nome é obrigatório' });
 
     const db = getDb();
     const chId = id || genId();
     const channelName = name.toLowerCase().replace(/\s+/g, '-');
 
-    db.prepare('INSERT INTO channels (id, workspace_id, name, description, type, created_at) VALUES (?,?,?,?,?,?)')
-      .run(chId, req.params.wid, channelName, description || '', type || 'text', Date.now());
+    db.prepare('INSERT INTO channels (id, workspace_id, name, description, type, category_id, created_at) VALUES (?,?,?,?,?,?,?)')
+      .run(chId, req.params.wid, channelName, description || '', type || 'text', categoryId || null, Date.now());
 
     const ch = db.prepare('SELECT * FROM channels WHERE id = ?').get(chId);
     broadcast(req.userId, { type: 'channel:created', channel: hydrateChannel(ch) });
@@ -138,7 +191,7 @@ function createApiRouter(broadcast) {
   });
 
   router.patch('/channels/:id', (req, res) => {
-    const { name, description, topic } = req.body;
+    const { name, description, topic, categoryId } = req.body;
     const db = getDb();
     const sets = [];
     const vals = [];
@@ -146,6 +199,7 @@ function createApiRouter(broadcast) {
     if (name !== undefined) { sets.push('name = ?'); vals.push(name.toLowerCase().replace(/\s+/g, '-')); }
     if (description !== undefined) { sets.push('description = ?'); vals.push(description); }
     if (topic !== undefined) { sets.push('topic = ?'); vals.push(topic); }
+    if (categoryId !== undefined) { sets.push('category_id = ?'); vals.push(categoryId || null); }
 
     if (sets.length === 0) return res.status(400).json({ error: 'Nenhum campo' });
     vals.push(req.params.id);
@@ -727,6 +781,7 @@ function createApiRouter(broadcast) {
 function hydrateWorkspace(db, ws) {
   const members = db.prepare('SELECT * FROM workspace_members WHERE workspace_id = ?').all(ws.id);
   const channels = db.prepare('SELECT * FROM channels WHERE workspace_id = ? ORDER BY created_at').all(ws.id);
+  const categories = db.prepare('SELECT * FROM channel_categories WHERE workspace_id = ? ORDER BY position').all(ws.id);
 
   return {
     id: ws.id,
@@ -738,6 +793,7 @@ function hydrateWorkspace(db, ws) {
     ownerId: ws.owner_id,
     members: members.map((m) => ({ userId: m.user_id, role: m.role, joinedAt: m.joined_at })),
     channels: channels.map(hydrateChannel),
+    categories: categories.map(hydrateCategory),
     boards: [],
     pages: [],
     createdAt: ws.created_at,
@@ -756,6 +812,17 @@ function hydrateChannel(ch) {
     topic: ch.topic || '',
     categoryId: ch.category_id || '',
     createdAt: ch.created_at,
+  };
+}
+
+function hydrateCategory(cat) {
+  return {
+    id: cat.id,
+    workspaceId: cat.workspace_id,
+    name: cat.name,
+    type: cat.type || 'text',
+    position: cat.position,
+    createdAt: cat.created_at,
   };
 }
 

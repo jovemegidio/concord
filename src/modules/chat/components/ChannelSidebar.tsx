@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Volume2, Plus, Trash2, Settings, ChevronDown, ChevronRight, Users, MicOff,
+  Volume2, Plus, Trash2, Settings, ChevronDown, ChevronRight, Users, MicOff, Edit3,
 } from 'lucide-react';
 import { useNavigationStore, useChatStore } from '@/stores';
 import { Avatar, IconButton } from '@/components/ui';
@@ -18,7 +18,10 @@ import type { User } from '@/types';
 
 export const ChannelSidebar: React.FC = () => {
   const { activeWorkspaceId, activeChannelId, setActiveChannel } = useNavigationStore();
-  const { getWorkspaceById, currentUser, deleteChannel, joinVoiceChannel, getVoiceUsers, getVoiceChannel, getUserById } = useChatStore();
+  const {
+    getWorkspaceById, currentUser, deleteChannel, joinVoiceChannel, getVoiceUsers,
+    getVoiceChannel, getUserById, renameChannel, createCategory, renameCategory, loadCategories,
+  } = useChatStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [textExpanded, setTextExpanded] = useState(true);
   const [voiceExpanded, setVoiceExpanded] = useState(true);
@@ -28,15 +31,33 @@ export const ChannelSidebar: React.FC = () => {
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [profilePopupUser, setProfilePopupUser] = useState<User | null>(null);
   const speaking = useSpeakingStore((s) => s.speaking);
-  const [textCategoryName, setTextCategoryName] = useState('Canais de Texto');
-  const [voiceCategoryName, setVoiceCategoryName] = useState('Canais de Voz');
-  const [editingCategory, setEditingCategory] = useState<'text' | 'voice' | null>(null);
+
+  // Category editing
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [categoryEditValue, setCategoryEditValue] = useState('');
+
+  // Channel renaming
+  const [renamingChannelId, setRenamingChannelId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const workspace = activeWorkspaceId ? getWorkspaceById(activeWorkspaceId) : undefined;
   const textChannels = workspace?.channels.filter((c) => c.type === 'text' || c.type === 'announcement') ?? [];
   const voiceChannels = workspace?.channels.filter((c) => c.type === 'voice') ?? [];
   const activeVoice = getVoiceChannel();
+
+  // Get category names (from server or defaults)
+  const categories = workspace?.categories ?? [];
+  const textCategory = categories.find((c) => c.type === 'text');
+  const voiceCategory = categories.find((c) => c.type === 'voice');
+  const textCategoryName = textCategory?.name || 'Canais de Texto';
+  const voiceCategoryName = voiceCategory?.name || 'Canais de Voz';
+
+  // Load categories from server
+  useEffect(() => {
+    if (activeWorkspaceId) {
+      loadCategories(activeWorkspaceId);
+    }
+  }, [activeWorkspaceId, loadCategories]);
 
   useEffect(() => {
     if (!activeChannelId && textChannels.length > 0) {
@@ -45,6 +66,12 @@ export const ChannelSidebar: React.FC = () => {
   }, [activeChannelId, textChannels, setActiveChannel]);
 
   if (!workspace) return null;
+
+  const isOwnerOrAdmin = () => {
+    if (!currentUser) return false;
+    const member = workspace.members.find((m) => m.userId === currentUser.id);
+    return member?.role === 'owner' || member?.role === 'admin';
+  };
 
   const handleContextMenu = (e: React.MouseEvent, channelId: string) => {
     e.preventDefault();
@@ -59,6 +86,39 @@ export const ChannelSidebar: React.FC = () => {
       const remaining = workspace.channels.filter((c) => c.id !== channelId);
       if (remaining.length > 0) setActiveChannel(remaining[0].id);
     }
+  };
+
+  const handleStartRename = (channelId: string) => {
+    const ch = workspace.channels.find((c) => c.id === channelId);
+    if (!ch) return;
+    setRenamingChannelId(channelId);
+    setRenameValue(ch.name);
+    setContextMenu(null);
+  };
+
+  const handleRenameSubmit = () => {
+    if (!renamingChannelId || !activeWorkspaceId || !renameValue.trim()) {
+      setRenamingChannelId(null);
+      return;
+    }
+    renameChannel(activeWorkspaceId, renamingChannelId, renameValue.trim());
+    setRenamingChannelId(null);
+  };
+
+  const handleCategoryRename = (categoryType: 'text' | 'voice') => {
+    const newName = categoryEditValue.trim();
+    if (!newName || !activeWorkspaceId) {
+      setEditingCategory(null);
+      return;
+    }
+
+    const existingCat = categories.find((c) => c.type === categoryType);
+    if (existingCat) {
+      renameCategory(existingCat.id, newName);
+    } else {
+      createCategory(activeWorkspaceId, newName, categoryType);
+    }
+    setEditingCategory(null);
   };
 
   return (
@@ -133,15 +193,9 @@ export const ChannelSidebar: React.FC = () => {
               <input
                 value={categoryEditValue}
                 onChange={(e) => setCategoryEditValue(e.target.value)}
-                onBlur={() => {
-                  if (categoryEditValue.trim()) setTextCategoryName(categoryEditValue.trim());
-                  setEditingCategory(null);
-                }}
+                onBlur={() => handleCategoryRename('text')}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    if (categoryEditValue.trim()) setTextCategoryName(categoryEditValue.trim());
-                    setEditingCategory(null);
-                  }
+                  if (e.key === 'Enter') handleCategoryRename('text');
                   if (e.key === 'Escape') setEditingCategory(null);
                 }}
                 className="w-full bg-surface-800 border border-brand-500 rounded px-2 py-0.5 text-[11px] font-bold text-surface-200 uppercase tracking-widest focus:outline-none"
@@ -165,26 +219,44 @@ export const ChannelSidebar: React.FC = () => {
             )}
           </div>
 
-          {textExpanded && textChannels.map((channel) => (
-            <button
-              key={channel.id}
-              onClick={() => setActiveChannel(channel.id)}
-              onContextMenu={(e) => handleContextMenu(e, channel.id)}
-              className={cn(
-                'flex items-center gap-2 w-full px-2.5 py-1.5 mx-2 rounded-md text-[13px] transition-all duration-150 group relative',
-                'max-w-[calc(100%-16px)]',
-                activeChannelId === channel.id
-                  ? 'bg-surface-700/70 text-surface-100 font-medium'
-                  : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/50',
-              )}
-            >
-              {activeChannelId === channel.id && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand-500 rounded-r-full" />
-              )}
-              <ChannelIcon type={channel.type} size={16} className={cn('shrink-0', activeChannelId === channel.id ? 'opacity-80' : 'opacity-50')} />
-              <span className="truncate">{channel.name}</span>
-            </button>
-          ))}
+          {textExpanded && textChannels.map((channel) => {
+            const isRenaming = renamingChannelId === channel.id;
+            return (
+              <button
+                key={channel.id}
+                onClick={() => !isRenaming && setActiveChannel(channel.id)}
+                onContextMenu={(e) => handleContextMenu(e, channel.id)}
+                className={cn(
+                  'flex items-center gap-2 w-full px-2.5 py-1.5 mx-2 rounded-md text-[13px] transition-all duration-150 group relative',
+                  'max-w-[calc(100%-16px)]',
+                  activeChannelId === channel.id
+                    ? 'bg-surface-700/70 text-surface-100 font-medium'
+                    : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800/50',
+                )}
+              >
+                {activeChannelId === channel.id && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-brand-500 rounded-r-full" />
+                )}
+                <ChannelIcon type={channel.type} size={16} className={cn('shrink-0', activeChannelId === channel.id ? 'opacity-80' : 'opacity-50')} />
+                {isRenaming ? (
+                  <input
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={handleRenameSubmit}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRenameSubmit();
+                      if (e.key === 'Escape') setRenamingChannelId(null);
+                    }}
+                    className="flex-1 bg-surface-800 border border-brand-500 rounded px-1 py-0.5 text-[13px] text-surface-200 focus:outline-none"
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span className="truncate">{channel.name}</span>
+                )}
+              </button>
+            );
+          })}
 
           {/* Voice channels */}
           <div className="px-2 mb-1 mt-5">
@@ -192,15 +264,9 @@ export const ChannelSidebar: React.FC = () => {
               <input
                 value={categoryEditValue}
                 onChange={(e) => setCategoryEditValue(e.target.value)}
-                onBlur={() => {
-                  if (categoryEditValue.trim()) setVoiceCategoryName(categoryEditValue.trim());
-                  setEditingCategory(null);
-                }}
+                onBlur={() => handleCategoryRename('voice')}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    if (categoryEditValue.trim()) setVoiceCategoryName(categoryEditValue.trim());
-                    setEditingCategory(null);
-                  }
+                  if (e.key === 'Enter') handleCategoryRename('voice');
                   if (e.key === 'Escape') setEditingCategory(null);
                 }}
                 className="w-full bg-surface-800 border border-brand-500 rounded px-2 py-0.5 text-[11px] font-bold text-surface-200 uppercase tracking-widest focus:outline-none"
@@ -226,11 +292,13 @@ export const ChannelSidebar: React.FC = () => {
           {voiceExpanded && voiceChannels.map((channel) => {
             const usersInChannel = getVoiceUsers(channel.id);
             const isActive = activeVoice === channel.id;
+            const isRenaming = renamingChannelId === channel.id;
 
             return (
               <div key={channel.id}>
                 <button
                   onClick={() => {
+                    if (isRenaming) return;
                     if (activeVoice !== channel.id) { playJoinSound(); joinVoiceChannel(channel.id); }
                     setActiveChannel(channel.id);
                   }}
@@ -244,7 +312,22 @@ export const ChannelSidebar: React.FC = () => {
                   )}
                 >
                   <Volume2 size={16} className="shrink-0 opacity-60" />
-                  <span className="truncate">{channel.name}</span>
+                  {isRenaming ? (
+                    <input
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={handleRenameSubmit}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRenameSubmit();
+                        if (e.key === 'Escape') setRenamingChannelId(null);
+                      }}
+                      className="flex-1 bg-surface-800 border border-brand-500 rounded px-1 py-0.5 text-sm text-surface-200 focus:outline-none"
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="truncate">{channel.name}</span>
+                  )}
                   {usersInChannel.length > 0 && (
                     <span className="ml-auto text-[10px] text-green-400">{usersInChannel.length}</span>
                   )}
@@ -306,16 +389,25 @@ export const ChannelSidebar: React.FC = () => {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
           <div
-            className="fixed z-50 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1 min-w-[160px]"
+            className="fixed z-50 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1 min-w-[180px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             <button
-              onClick={() => handleDeleteChannel(contextMenu.channelId)}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 hover:bg-red-600/10 transition-colors"
+              onClick={() => handleStartRename(contextMenu.channelId)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-surface-300 hover:bg-surface-700/50 transition-colors"
             >
-              <Trash2 size={14} />
-              Excluir Canal
+              <Edit3 size={14} />
+              Renomear Canal
             </button>
+            {isOwnerOrAdmin() && (
+              <button
+                onClick={() => handleDeleteChannel(contextMenu.channelId)}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 hover:bg-red-600/10 transition-colors"
+              >
+                <Trash2 size={14} />
+                Excluir Canal
+              </button>
+            )}
           </div>
         </>
       )}
