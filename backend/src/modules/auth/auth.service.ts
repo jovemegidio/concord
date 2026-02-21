@@ -145,6 +145,23 @@ export class AuthService {
 
   // ─── Private Helpers ───
 
+  /**
+   * Parse a duration string like '7d', '30d', '1h', '15m' to milliseconds.
+   */
+  private parseDuration(duration: string): number {
+    const match = duration.match(/^(\d+)([smhd])$/);
+    if (!match) return 7 * 24 * 60 * 60 * 1000; // Default 7 days
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+    switch (unit) {
+      case 's': return value * 1000;
+      case 'm': return value * 60 * 1000;
+      case 'h': return value * 60 * 60 * 1000;
+      case 'd': return value * 24 * 60 * 60 * 1000;
+      default: return 7 * 24 * 60 * 60 * 1000;
+    }
+  }
+
   private async generateAuthResponse(userId: string): Promise<AuthResponse> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -174,7 +191,8 @@ export class AuthService {
     // Save refresh token session
     const refreshExpiresIn = this.configService.get('JWT_REFRESH_EXPIRES_IN', '7d');
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + parseInt(refreshExpiresIn) || 7);
+    const durationMs = this.parseDuration(refreshExpiresIn);
+    expiresAt.setTime(expiresAt.getTime() + durationMs);
 
     await this.prisma.session.create({
       data: {

@@ -8,7 +8,14 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../infrastructure/redis/redis.service';
+
+interface AuthenticatedSocket extends Socket {
+  userId?: string;
+  displayName?: string;
+}
 
 /**
  * Main WebSocket Gateway.
@@ -23,13 +30,39 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @WebSocketServer()
   server: Server;
 
-  constructor(private redisService: RedisService) {}
+  constructor(
+    private redisService: RedisService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
+  ) {}
 
-  handleConnection(client: Socket) {
-    console.log(`⚡ Realtime WS connected: ${client.id}`);
+  handleConnection(client: AuthenticatedSocket) {
+    try {
+      const token =
+        client.handshake.auth?.token ||
+        client.handshake.headers?.authorization?.replace('Bearer ', '');
+
+      if (!token) {
+        client.emit('error', { message: 'Authentication required' });
+        client.disconnect();
+        return;
+      }
+
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_SECRET'),
+      });
+
+      client.userId = payload.sub;
+      client.displayName = payload.displayName;
+
+      console.log(`⚡ Realtime WS authenticated: ${client.id} (user: ${payload.displayName})`);
+    } catch (err) {
+      client.emit('error', { message: 'Invalid or expired token' });
+      client.disconnect();
+    }
   }
 
-  handleDisconnect(client: Socket) {
+  handleDisconnect(client: AuthenticatedSocket) {
     console.log(`⚡ Realtime WS disconnected: ${client.id}`);
   }
 

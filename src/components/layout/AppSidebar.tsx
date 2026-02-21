@@ -3,7 +3,7 @@ import {
   MessageSquare, LayoutGrid, FileText,
   Palette, Wifi, WifiOff, Plus, LogOut, ImageIcon, Upload,
 } from 'lucide-react';
-import { useNavigationStore, useChatStore, useThemeStore, useConnectionStore, CONCORD_USERS } from '@/stores';
+import { useNavigationStore, useChatStore, useThemeStore, useConnectionStore, useAuthStore, CONCORD_USERS } from '@/stores';
 import type { ThemeName } from '@/stores';
 import { Avatar, Button, Modal } from '@/components/ui';
 import { Tooltip } from '@/components/ui';
@@ -364,7 +364,10 @@ export const AppSidebar: React.FC = () => {
           {/* Logout */}
           <Tooltip content="Sair" position="right">
             <button
-              onClick={() => useChatStore.getState().logout()}
+              onClick={() => {
+                useAuthStore.getState().logout();
+                useChatStore.getState().logout();
+              }}
               className="w-10 h-10 rounded-xl flex items-center justify-center text-surface-500 hover:text-red-400 hover:bg-red-600/10 transition-colors"
             >
               <LogOut size={18} />

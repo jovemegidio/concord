@@ -8,6 +8,8 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../../infrastructure/redis/redis.service';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 
@@ -33,10 +35,36 @@ export class CommunicationGateway implements OnGatewayConnection, OnGatewayDisco
   constructor(
     private redisService: RedisService,
     private prisma: PrismaService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   async handleConnection(client: SocketWithData) {
-    console.log(`🔌 WS connected: ${client.id}`);
+    try {
+      // Extract and verify JWT from handshake
+      const token =
+        client.handshake.auth?.token ||
+        client.handshake.headers?.authorization?.replace('Bearer ', '');
+
+      if (!token) {
+        client.emit('error', { message: 'Authentication required' });
+        client.disconnect();
+        return;
+      }
+
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_SECRET'),
+      });
+
+      // Attach verified user info to socket
+      client.userId = payload.sub;
+      client.displayName = payload.displayName;
+
+      console.log(`🔌 WS authenticated: ${client.id} (user: ${payload.displayName})`);
+    } catch (err) {
+      client.emit('error', { message: 'Invalid or expired token' });
+      client.disconnect();
+    }
   }
 
   async handleDisconnect(client: SocketWithData) {
@@ -71,11 +99,26 @@ export class CommunicationGateway implements OnGatewayConnection, OnGatewayDisco
   @SubscribeMessage('identify')
   async handleIdentify(
     @ConnectedSocket() client: SocketWithData,
-    @MessageBody() data: { userId: string; tenantId: string; displayName: string },
+    @MessageBody() data: { tenantId: string },
   ) {
-    client.userId = data.userId;
+    // userId and displayName come from JWT verification in handleConnection
+    if (!client.userId) {
+      return { status: 'error', message: 'Not authenticated' };
+    }
+
     client.tenantId = data.tenantId;
-    client.displayName = data.displayName;
+
+    // Verify user belongs to this tenant
+    const membership = await this.prisma.tenantUser.findUnique({
+      where: {
+        tenantId_userId: { tenantId: data.tenantId, userId: client.userId },
+      },
+    });
+    if (!membership) {
+      client.emit('error', { message: 'You do not belong to this tenant' });
+      client.disconnect();
+      return;
+    }
 
     // Join tenant room
     client.join(`tenant:${data.tenantId}`);
@@ -84,22 +127,22 @@ export class CommunicationGateway implements OnGatewayConnection, OnGatewayDisco
     if (!this.onlineUsers.has(data.tenantId)) {
       this.onlineUsers.set(data.tenantId, new Set());
     }
-    this.onlineUsers.get(data.tenantId)!.add(data.userId);
+    this.onlineUsers.get(data.tenantId)!.add(client.userId);
 
     // Redis for horizontal scaling
-    await this.redisService.sadd(`tenant:${data.tenantId}:online`, data.userId);
-    await this.redisService.set(`user:${data.userId}:status`, 'ONLINE', 86400);
+    await this.redisService.sadd(`tenant:${data.tenantId}:online`, client.userId);
+    await this.redisService.set(`user:${client.userId}:status`, 'ONLINE', 86400);
 
     // Update DB
     await this.prisma.user.update({
-      where: { id: data.userId },
+      where: { id: client.userId },
       data: { status: 'ONLINE' },
     }).catch(() => {});
 
     // Notify others
     client.to(`tenant:${data.tenantId}`).emit('user:online', {
-      userId: data.userId,
-      displayName: data.displayName,
+      userId: client.userId,
+      displayName: client.displayName,
     });
 
     // Send online users list to the new client

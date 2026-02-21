@@ -67,6 +67,13 @@ export class BoardController {
     return this.columnService.create(boardId, dto);
   }
 
+  // Static routes MUST come before parametric routes to avoid conflicts
+  @Put(':boardId/columns/reorder')
+  @ApiOperation({ summary: 'Reorder columns' })
+  async reorderColumns(@Param('boardId') boardId: string, @Body() dto: ReorderColumnsDto) {
+    return this.columnService.reorder(boardId, dto);
+  }
+
   @Put(':boardId/columns/:columnId')
   @ApiOperation({ summary: 'Update column' })
   async updateColumn(@Param('columnId') columnId: string, @Body() dto: Partial<CreateColumnDto>) {
@@ -77,11 +84,5 @@ export class BoardController {
   @ApiOperation({ summary: 'Delete column' })
   async deleteColumn(@Param('columnId') columnId: string) {
     return this.columnService.delete(columnId);
-  }
-
-  @Put(':boardId/columns/reorder')
-  @ApiOperation({ summary: 'Reorder columns' })
-  async reorderColumns(@Param('boardId') boardId: string, @Body() dto: ReorderColumnsDto) {
-    return this.columnService.reorder(boardId, dto);
   }
 }

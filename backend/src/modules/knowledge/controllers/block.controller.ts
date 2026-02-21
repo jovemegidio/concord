@@ -26,18 +26,7 @@ export class BlockController {
     return this.blockService.create(pageId, dto);
   }
 
-  @Put(':blockId')
-  @ApiOperation({ summary: 'Update block content' })
-  async update(@Param('blockId') blockId: string, @Body() dto: UpdateBlockDto) {
-    return this.blockService.update(blockId, dto);
-  }
-
-  @Delete(':blockId')
-  @ApiOperation({ summary: 'Delete block' })
-  async delete(@Param('blockId') blockId: string) {
-    return this.blockService.delete(blockId);
-  }
-
+  // Static routes MUST come before parametric routes to avoid conflicts
   @Put('reorder')
   @ApiOperation({ summary: 'Reorder blocks on page' })
   async reorder(@Param('pageId') pageId: string, @Body() dto: ReorderBlocksDto) {
@@ -51,5 +40,17 @@ export class BlockController {
     @Body() blocks: Array<{ id: string; content: any; position: number }>,
   ) {
     return this.blockService.bulkUpdate(pageId, blocks);
+  }
+
+  @Put(':blockId')
+  @ApiOperation({ summary: 'Update block content' })
+  async update(@Param('blockId') blockId: string, @Body() dto: UpdateBlockDto) {
+    return this.blockService.update(blockId, dto);
+  }
+
+  @Delete(':blockId')
+  @ApiOperation({ summary: 'Delete block' })
+  async delete(@Param('blockId') blockId: string) {
+    return this.blockService.delete(blockId);
   }
 }

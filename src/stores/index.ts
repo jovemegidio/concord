@@ -6,3 +6,5 @@ export { usePagesStore } from './pages.store';
 export { useThemeStore, initTheme } from './theme.store';
 export type { ThemeName } from './theme.store';
 export { useConnectionStore, syncManager } from './sync.middleware';
+export { useAuthStore } from './auth.store';
+export type { AuthUser, AuthTenant } from './auth.store';

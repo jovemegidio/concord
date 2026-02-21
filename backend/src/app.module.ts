@@ -1,6 +1,7 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -12,6 +13,7 @@ import { WebsocketModule } from './modules/websocket/websocket.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 
 @Module({
   imports: [
@@ -41,6 +43,13 @@ import { LoggerMiddleware } from './common/middleware/logger.middleware';
     KnowledgeModule,
     WebsocketModule,
     AuditModule,
+  ],
+  providers: [
+    // Global audit interceptor — logs all mutations automatically
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
   ],
 })
 export class AppModule implements NestModule {
