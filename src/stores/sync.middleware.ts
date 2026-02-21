@@ -1,13 +1,13 @@
 // ============================================================
-// Concord — Real-Time Sync via WebSocket
-// Replaces BroadcastChannel with a WebSocket relay server
-// Handles: state sync, presence (online/offline), typing
+// Concord — Real-Time Sync via WebSocket (v2)
+// Granular event-based sync instead of full state replacement
+// JWT-authenticated connections
 // ============================================================
 
 import { create } from 'zustand';
-import type { StoreApi } from 'zustand';
+import { getWsUrl, getAccessToken } from '@/lib/api';
 
-// ── Connection state (reactive via tiny Zustand store) ──────
+// ── Connection state ────────────────────────────────────────
 interface ConnectionState {
   connected: boolean;
   initialSyncDone: boolean;
@@ -26,38 +26,41 @@ export const useConnectionStore = create<ConnectionState>()((set) => ({
   _setOnlineUsers: (ids) => set({ onlineUsers: ids }),
 }));
 
+// ── Event Listener Type ─────────────────────────────────────
+type EventListener = (data: Record<string, unknown>) => void;
+
 // ── Sync Manager (singleton) ────────────────────────────────
 class SyncManager {
   private ws: WebSocket | null = null;
-  private stores = new Map<string, { store: StoreApi<unknown>; exclude?: string[] }>();
-  private isSyncing = false;
-  private ready = false; // Don't broadcast until initial state received
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private typingListeners: Array<(data: { channelId: string; userId: string; isTyping: boolean }) => void> = [];
+  private listeners = new Map<string, Set<EventListener>>();
+  private typingListeners: Array<(data: { channelId: string; userId: string; displayName: string; isTyping: boolean }) => void> = [];
   private speakingListeners: Array<(data: { userId: string; speaking: boolean }) => void> = [];
-  private pendingIdentity: { userId: string; displayName: string } | null = null;
+  private voiceListeners: Array<(data: Record<string, unknown>) => void> = [];
 
   connect() {
+    const token = getAccessToken();
+    if (!token) {
+      // No token yet, wait and retry
+      this.reconnectTimer = setTimeout(() => this.connect(), 1000);
+      return;
+    }
+
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
-    // In dev mode (Vite), connect directly to the server port
-    // In production, connect to the same host serving the app
-    const wsUrl = import.meta.env.DEV
-      ? 'ws://localhost:3001'
-      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
-
+    const wsUrl = getWsUrl();
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      console.log('✅ Conectado ao servidor Concord');
-      if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
-      useConnectionStore.getState()._setConnected(true);
-      // Re-identify on reconnect
-      if (this.pendingIdentity) {
-        this.identify(this.pendingIdentity.userId, this.pendingIdentity.displayName);
+      console.log('✅ WebSocket conectado (v2 — eventos granulares)');
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
       }
+      useConnectionStore.getState()._setConnected(true);
+      useConnectionStore.getState()._setInitialSyncDone(true);
     };
 
     this.ws.onmessage = (event) => {
@@ -65,113 +68,42 @@ class SyncManager {
         const msg = JSON.parse(event.data);
 
         switch (msg.type) {
-          case 'init': {
-            // Server sends full state snapshot on connect
-            // Use replace (2nd arg = true) so cached/stale local state is fully overwritten
-            this.isSyncing = true;
-            const storesToPush: Array<{ name: string; state: Record<string, unknown> }> = [];
-
-            for (const [name, { store, exclude }] of this.stores) {
-              const current = store.getState() as Record<string, unknown>;
-              const serverState = msg.state[name];
-
-              // Check if server state is empty/null but client has data from localStorage
-              const serverIsEmpty = !serverState || (typeof serverState === 'object' && Object.keys(serverState).length === 0);
-
-              // Generic check: does the client have any meaningful data in this store?
-              // Works for chat (workspaces), boards (boards), pages (pages), etc.
-              const clientHasData = Object.keys(current).some((key) => {
-                if (typeof current[key] === 'function') return false;
-                if (exclude?.includes(key)) return false;
-                if (Array.isArray(current[key]) && (current[key] as unknown[]).length > 0) return true;
-                if (current[key] && typeof current[key] === 'object' && Object.keys(current[key] as object).length > 0) return true;
-                return false;
-              });
-
-              if (serverIsEmpty && clientHasData) {
-                // Client has persisted data but server lost it (e.g. Render restart)
-                // Push client state to server instead of wiping it
-                const filtered: Record<string, unknown> = {};
-                for (const key of Object.keys(current)) {
-                  if (typeof current[key] === 'function') continue;
-                  if (exclude?.includes(key)) continue;
-                  filtered[key] = current[key];
-                }
-                storesToPush.push({ name, state: filtered });
-              } else if (serverState) {
-                // Server has data — merge normally
-                const preserved: Record<string, unknown> = {};
-                if (exclude) {
-                  for (const key of exclude) {
-                    if (current[key] !== undefined) preserved[key] = current[key];
-                  }
-                }
-                // Also preserve all functions from current state
-                for (const key of Object.keys(current)) {
-                  if (typeof current[key] === 'function') preserved[key] = current[key];
-                }
-                store.setState({ ...preserved, ...serverState }, true);
-              }
-            }
-            this.isSyncing = false;
-            this.ready = true; // Now safe to broadcast local changes
-
-            // Push any client-side persisted state back to server
-            for (const item of storesToPush) {
-              try {
-                this.ws?.send(JSON.stringify({
-                  type: 'sync',
-                  store: item.name,
-                  state: item.state,
-                }));
-              } catch {
-                // ignore
-              }
-            }
-
-            useConnectionStore.getState()._setInitialSyncDone(true);
-            break;
-          }
-
-          case 'sync': {
-            // Another client updated a store
-            const entry = this.stores.get(msg.store);
-            if (entry) {
-              this.isSyncing = true;
-              entry.store.setState(msg.state);
-              this.isSyncing = false;
-            }
-            break;
-          }
-
-          case 'presence': {
-            // Online users list update
+          case 'presence':
             useConnectionStore.getState()._setOnlineUsers(msg.online ?? []);
             break;
-          }
 
-          case 'typing': {
-            // Typing indicator from another user
+          case 'typing':
             this.typingListeners.forEach((fn) => fn(msg));
             break;
-          }
 
-          case 'speaking': {
-            // Speaking indicator from another user
+          case 'speaking':
             this.speakingListeners.forEach((fn) => fn(msg));
+            break;
+
+          case 'voice:join':
+          case 'voice:leave':
+          case 'voice:mute':
+          case 'voice:deafen':
+            this.voiceListeners.forEach((fn) => fn(msg));
+            break;
+
+          default: {
+            // Granular data events: message:created, board:updated, page:created, etc.
+            const eventListeners = this.listeners.get(msg.type);
+            if (eventListeners) {
+              eventListeners.forEach((fn) => fn(msg));
+            }
             break;
           }
         }
       } catch {
-        // ignore malformed messages
+        // Ignore malformed messages
       }
     };
 
     this.ws.onclose = () => {
       useConnectionStore.getState()._setConnected(false);
-      useConnectionStore.getState()._setInitialSyncDone(false);
-      this.ready = false;
-      // Reconnect after 2 seconds
+      // Reconnect with backoff
       this.reconnectTimer = setTimeout(() => this.connect(), 2000);
     };
 
@@ -180,88 +112,98 @@ class SyncManager {
     };
   }
 
-  register(store: StoreApi<unknown>, name: string, exclude?: string[]) {
-    this.stores.set(name, { store, exclude });
+  disconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    useConnectionStore.getState()._setConnected(false);
+  }
 
-    // Subscribe to local state changes → send to server
-    store.subscribe((state) => {
-      if (this.isSyncing || !this.ready) return;
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+  // ── Event Registration ──────────────────────────────────
+  on(eventType: string, listener: EventListener): () => void {
+    if (!this.listeners.has(eventType)) {
+      this.listeners.set(eventType, new Set());
+    }
+    this.listeners.get(eventType)!.add(listener);
+    return () => {
+      this.listeners.get(eventType)?.delete(listener);
+    };
+  }
 
-      const filtered: Record<string, unknown> = {};
-      const s = state as Record<string, unknown>;
-      for (const key of Object.keys(s)) {
-        if (typeof s[key] === 'function') continue;
-        if (exclude?.includes(key)) continue;
-        filtered[key] = s[key];
-      }
-
+  // ── Send message to server ──────────────────────────────
+  send(message: Record<string, unknown>) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
       try {
-        this.ws.send(JSON.stringify({
-          type: 'sync',
-          store: name,
-          state: filtered,
-        }));
+        this.ws.send(JSON.stringify(message));
       } catch {
-        // ignore serialization failures
+        // ignore
       }
-    });
-
-    // Auto-connect on first register
-    if (!this.ws) this.connect();
-  }
-
-  /** Identify the current user to the server (for presence tracking) */
-  identify(userId: string, displayName: string) {
-    this.pendingIdentity = { userId, displayName };
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'identify', userId, displayName }));
     }
   }
 
-  /** Send typing indicator */
-  sendTyping(channelId: string, userId: string, isTyping: boolean) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'typing', channelId, userId, isTyping }));
-    }
+  // ── Identify (legacy compat — JWT provides identity now) ──
+  identify(_userId?: string, _displayName?: string) {
+    // No-op: identity comes from JWT token on WebSocket connection
+    // Just ensure we're connected
+    this.connect();
   }
 
-  /** Listen for typing indicators from other users */
-  onTyping(listener: (data: { channelId: string; userId: string; isTyping: boolean }) => void) {
+  // ── Typing ──────────────────────────────────────────────
+  sendTyping(channelId: string, _userId?: string, isTyping?: boolean) {
+    // Supports both (channelId, userId, isTyping) and (channelId, isTyping)
+    const typing = typeof _userId === 'boolean' ? _userId : isTyping;
+    this.send({ type: 'typing', channelId, isTyping: typing ?? true });
+  }
+
+  onTyping(listener: (data: { channelId: string; userId: string; displayName: string; isTyping: boolean }) => void) {
     this.typingListeners.push(listener);
     return () => {
       this.typingListeners = this.typingListeners.filter((fn) => fn !== listener);
     };
   }
 
-  /** Send speaking indicator (relayed but not persisted) */
-  sendSpeaking(userId: string, speaking: boolean) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'speaking', userId, speaking }));
-    }
+  // ── Speaking ────────────────────────────────────────────
+  sendSpeaking(_userId?: string, speaking?: boolean) {
+    // Supports both (userId, speaking) and (speaking)
+    const isSpeaking = typeof _userId === 'boolean' ? _userId : speaking;
+    this.send({ type: 'speaking', speaking: isSpeaking ?? false });
   }
 
-  /** Listen for speaking indicators from other users */
   onSpeaking(listener: (data: { userId: string; speaking: boolean }) => void) {
     this.speakingListeners.push(listener);
     return () => {
       this.speakingListeners = this.speakingListeners.filter((fn) => fn !== listener);
     };
   }
+
+  // ── Voice ───────────────────────────────────────────────
+  sendVoice(type: string, data?: Record<string, unknown>) {
+    this.send({ type, ...data });
+  }
+
+  onVoice(listener: (data: Record<string, unknown>) => void) {
+    this.voiceListeners.push(listener);
+    return () => {
+      this.voiceListeners = this.voiceListeners.filter((fn) => fn !== listener);
+    };
+  }
+
+  // ── Subscribe to workspace events ───────────────────────
+  subscribe(workspaceId: string) {
+    this.send({ type: 'subscribe', workspaceId });
+  }
 }
 
 export const syncManager = new SyncManager();
 
-/**
- * Enable real-time sync for a Zustand store.
- *
- * Call once after store creation:
- *   enableSync(useChatStore, 'chat', ['currentUser']);
- */
-export function enableSync<T extends object>(
-  store: StoreApi<T>,
-  channelName: string,
-  exclude?: string[],
-) {
-  syncManager.register(store as StoreApi<unknown>, channelName, exclude);
+// ── Legacy compat: enableSync is now a no-op ────────────────
+// Stores use API calls + WS events instead of full-state sync
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function enableSync(_store: unknown, _key: string, _exclude?: string[]) {
+  // No-op — left for backward compatibility during migration
 }

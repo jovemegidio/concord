@@ -43,6 +43,10 @@ uploads/
 
 # Server persistence (local state)
 server/data.json
+server/data.json.migrated
+server/concord.db
+server/concord.db-wal
+server/concord.db-shm
 
 # Prisma dev db
 backend/prisma/migrations/dev.db
