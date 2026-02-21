@@ -109,6 +109,7 @@ interface ChatStore {
 
   // API-backed hydration
   loadFromApi: () => Promise<void>;
+  loadMessages: (channelId: ID) => Promise<void>;
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -153,6 +154,8 @@ export const useChatStore = create<ChatStore>()(
               set((s) => {
                 s.workspaces = workspaces;
               });
+              // Subscribe to all workspaces for realtime events
+              workspaces.forEach((ws) => syncManager.subscribe(ws.id));
             }
           })
           .catch(() => {
@@ -168,10 +171,12 @@ export const useChatStore = create<ChatStore>()(
           s.typingUsers = {};
         }),
 
-      updateUserStatus: (status) =>
+      updateUserStatus: (status) => {
         set((s) => {
           if (s.currentUser) s.currentUser.status = status;
-        }),
+        });
+        api.auth.updateProfile({ status }).catch(() => {});
+      },
 
       updateProfile: (updates) => {
         set((s) => {
@@ -493,9 +498,33 @@ export const useChatStore = create<ChatStore>()(
             set((s) => {
               s.workspaces = workspaces;
             });
+            // Subscribe to all workspaces for realtime events
+            workspaces.forEach((ws) => syncManager.subscribe(ws.id));
           }
         } catch {
           // Keep local data on failure
+        }
+      },
+
+      loadMessages: async (channelId) => {
+        try {
+          const data = await api.get<{ messages: Message[]; hasMore: boolean }>(`/channels/${channelId}/messages`);
+          if (data && data.messages) {
+            set((s) => {
+              for (const ws of s.workspaces) {
+                const ch = ws.channels.find((c) => c.id === channelId);
+                if (ch) {
+                  // Merge: keep optimistic messages that aren't on server yet
+                  const serverIds = new Set(data.messages.map((m) => m.id));
+                  const localOnly = ch.messages.filter((m) => !serverIds.has(m.id) && Date.now() - m.createdAt < 10000);
+                  ch.messages = [...data.messages, ...localOnly];
+                  break;
+                }
+              }
+            });
+          }
+        } catch {
+          // Keep local messages on failure
         }
       },
     })),

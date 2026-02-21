@@ -654,7 +654,7 @@ function createApiRouter(broadcast) {
   });
 
   router.patch('/blocks/:id', (req, res) => {
-    const { content, type, properties } = req.body;
+    const { content, type, properties, position } = req.body;
     const db = getDb();
     const block = db.prepare('SELECT * FROM blocks WHERE id = ?').get(req.params.id);
     if (!block) return res.status(404).json({ error: 'Bloco não encontrado' });
@@ -668,6 +668,17 @@ function createApiRouter(broadcast) {
       const merged = { ...JSON.parse(block.properties || '{}'), ...properties };
       sets.push('properties = ?');
       vals.push(JSON.stringify(merged));
+    }
+    if (position !== undefined) {
+      // Reorder blocks within the page
+      const blocks = db.prepare('SELECT id FROM blocks WHERE page_id = ? ORDER BY position').all(block.page_id);
+      const oldIdx = blocks.findIndex(b => b.id === req.params.id);
+      if (oldIdx !== -1) {
+        blocks.splice(oldIdx, 1);
+        blocks.splice(position, 0, { id: req.params.id });
+        const upd = db.prepare('UPDATE blocks SET position = ? WHERE id = ?');
+        blocks.forEach((b, i) => upd.run(i, b.id));
+      }
     }
 
     if (sets.length > 0) {

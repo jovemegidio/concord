@@ -215,10 +215,3 @@ class SyncManager {
 }
 
 export const syncManager = new SyncManager();
-
-// ── Legacy compat: enableSync is now a no-op ────────────────
-// Stores use API calls + WS events instead of full-state sync
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function enableSync(_store: unknown, _key: string, _exclude?: string[]) {
-  // No-op — left for backward compatibility during migration
-}

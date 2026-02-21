@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigationStore, useChatStore, useConnectionStore, syncManager, useAuthStore } from '@/stores';
+import { useBoardStore } from '@/stores/board.store';
+import { usePagesStore } from '@/stores/pages.store';
 import { CONCORD_USERS, ZYNTRA_WORKSPACE_ID } from '@/stores/chat.store';
 import { AppSidebar } from './AppSidebar';
 import { AuthScreen } from './AuthScreen';
@@ -145,6 +147,14 @@ export const AppLayout: React.FC = () => {
       if (firstText) setActiveChannel(firstText.id);
     }
   }, [isLoggedIn, activeWorkspaceId, workspaces, getWorkspaceById, setActiveWorkspace, setActiveChannel]);
+
+  // Hydrate boards, pages, and subscribe to workspace events when workspace changes
+  useEffect(() => {
+    if (!activeWorkspaceId || !isLoggedIn) return;
+    useBoardStore.getState().loadBoards(activeWorkspaceId);
+    usePagesStore.getState().loadPages(activeWorkspaceId);
+    syncManager.subscribe(activeWorkspaceId);
+  }, [activeWorkspaceId, isLoggedIn]);
 
   // Not logged in → auth screen (enterprise + legacy selection)
   if (!isLoggedIn) {

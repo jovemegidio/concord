@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigationStore, useChatStore } from '@/stores';
+import { useNavigationStore, useChatStore, syncManager } from '@/stores';
+import { useBoardStore } from '@/stores/board.store';
+import { usePagesStore } from '@/stores/pages.store';
 import {
   ChannelSidebar,
   ChannelHeader,
@@ -14,7 +16,7 @@ import type { Message, User } from '@/types';
 
 export const ChatView: React.FC = () => {
   const { activeWorkspaceId, activeChannelId } = useNavigationStore();
-  const { getChannelById, getChannelMessages } = useChatStore();
+  const { getChannelById, getChannelMessages, loadMessages } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showMembers, setShowMembers] = useState(false);
   const [profilePopupUser, setProfilePopupUser] = useState<User | null>(null);
@@ -28,6 +30,13 @@ export const ChatView: React.FC = () => {
     activeWorkspaceId && activeChannelId
       ? getChannelMessages(activeWorkspaceId, activeChannelId)
       : [];
+
+  // Load messages from server when channel changes
+  useEffect(() => {
+    if (activeChannelId && channel && channel.type !== 'voice') {
+      loadMessages(activeChannelId);
+    }
+  }, [activeChannelId, channel?.type, loadMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

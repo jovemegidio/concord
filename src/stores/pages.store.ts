@@ -204,7 +204,7 @@ export const usePagesStore = create<PagesStore>()(
           page.blocks.forEach((b, i) => (b.position = i));
           page.updatedAt = Date.now();
         });
-        // The server will reorder when we send the full page update
+        api.patch(`/blocks/${blockId}`, { position: newIndex }).catch(() => {});
       },
 
       toggleBlockChecked: (pageId, blockId) => {
